@@ -1,0 +1,193 @@
+/*
+	This file is part of FreeJ2ME.
+
+	FreeJ2ME is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	FreeJ2ME is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with FreeJ2ME.  If not, see http://www.gnu.org/licenses/
+*/
+package org.recompile.freej2me.gamepad;
+
+import java.io.File;
+import java.io.InputStream;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.channels.ClosedByInterruptException;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+
+import java.util.ArrayList;
+
+import org.recompile.freej2me.FJGUI;
+import org.recompile.mobile.Mobile;
+import org.recompile.mobile.MobilePlatform;
+
+public class WindowsGamepadReader extends GamepadReader
+{
+	// The exe IS REQUIRED to be in the same directory as the jar.
+	private static final String WIN_32_PAD = "Win32Pad.exe";
+
+	private Process win32PadProcess;
+
+	// This one is used to kill the input reader process when FreeJ2ME-Plus
+	// closes, otherwise it will be dangling there doing nothing on the OS.
+	private Thread shutdownHook;
+
+	public WindowsGamepadReader(String devicePath, FJGUI gui)
+	{
+		super(devicePath, resolveDeviceName(devicePath), gui);
+	}
+
+	private static String resolveDeviceName(String path)
+	{
+		// Not sure DirectInput has a way to read the device
+		// name like linux does on /dev/input and SysFS, so we
+		// just append the path (which is just "0") to a fixed string.
+		return "Gamepad " + path;
+	}
+
+	public static ArrayList<String> getAvailableDevices()
+	{
+		File win32Pad = getFromParentDir();
+
+		// No exe on directory? No devices either so return early.
+		if (!win32Pad.exists() || win32Pad.length() == 0) { return null; }
+
+		ArrayList<String> devices = new ArrayList<String>();
+		devices.add("0");
+		return devices;
+	}
+
+	@Override
+	public void run()
+	{
+		ReadableByteChannel channel = null;
+		try
+		{
+			File win32Pad = getFromParentDir();
+
+			if (!win32Pad.exists() || win32Pad.length() == 0)
+			{
+				Mobile.log(Mobile.LOG_ERROR, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] ERROR: Required helper is missing: " + win32Pad.getAbsolutePath());
+				Mobile.log(Mobile.LOG_ERROR, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] Please check if '" + WIN_32_PAD + "' is in the same directory as this jar.");
+				return;
+			}
+
+			// Launch helper process with device target ID as argument (we only use ID 0)
+			ProcessBuilder pb = new ProcessBuilder(win32Pad.getAbsolutePath(), "0");
+
+			pb.redirectErrorStream(true);
+			win32PadProcess = pb.start();
+
+			// Needing to reference this object into a final object just so it
+			// can be ran on a thread... nice.
+			final WindowsGamepadReader self = this;
+			shutdownHook = new Thread(new Runnable()
+			{
+				public void run() { self.stop(); }
+			});
+			Runtime.getRuntime().addShutdownHook(shutdownHook);
+
+			// Direct binary input stream from C stdout
+			in = win32PadProcess.getInputStream();
+			channel = Channels.newChannel(in);
+
+			ByteBuffer buffer = ByteBuffer.allocate(8);
+			buffer.order(ByteOrder.LITTLE_ENDIAN);
+
+			Mobile.log(Mobile.LOG_INFO, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] Connected: " + deviceName + " (" + devicePath + ")");
+
+			while (running)
+			{
+				if(handleInput(channel, buffer) == -1) { break; }
+			}
+		}
+		catch (ClosedByInterruptException ce) { Mobile.log(Mobile.LOG_INFO, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] Input stream closed for refresh."); }
+		catch (Exception e)
+		{
+			Mobile.log(Mobile.LOG_ERROR, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] Windows Input stream disconnected: " + e.getMessage());
+		}
+		finally
+		{
+			if (channel != null)
+			{
+				try { channel.close(); }
+				catch (Exception e) { }
+			}
+			stop();
+			Mobile.log(Mobile.LOG_INFO, GamepadReader.class.getPackage().getName() + "." + GamepadReader.class.getSimpleName() + ": " + "[Gamepad] Input reader stopped for device " + devicePath);
+		}
+	}
+
+	// Resolves the parent directory of FreeJ2ME-Plus' jar, so that we don't
+	// have issues loading the gamepad exe in situation where the commandline
+	// is at a different directory when launching the jar.
+	private static File getFromParentDir()
+	{
+		try
+		{
+			File jarDir = new File(WindowsGamepadReader.class.getProtectionDomain().
+				getCodeSource().getLocation().toURI()).getParentFile();
+			return new File(jarDir, WIN_32_PAD);
+		}
+		catch (Exception e)
+		{
+			// Fallback to working directory if URI resolution fails
+			return new File(WIN_32_PAD);
+		}
+	}
+
+	public void stop()
+	{
+		super.stop();
+
+		// Deregister the hook during usual refresh button presses to avoid
+		// leaving useless triggers laying around... that often causes all sorts
+		// of weird issues.
+		if (shutdownHook != null)
+		{
+			try { Runtime.getRuntime().removeShutdownHook(shutdownHook); }
+			catch (Exception e) { }
+			shutdownHook = null;
+		}
+
+		if (win32PadProcess != null)
+		{
+			try
+			{
+				// Ask windows to nuke the process.
+				win32PadProcess.destroy();
+
+				// Close remaining process pipes so OS handles are dropped and
+				// we can close this process gracefully.
+				try { win32PadProcess.getOutputStream().close(); }
+				catch (Exception e) { }
+
+				try { win32PadProcess.getInputStream().close(); }
+				catch (Exception e) { }
+
+				try { win32PadProcess.getErrorStream().close(); }
+				catch (Exception e) { }
+			}
+			catch (Exception e) { }
+			finally { win32PadProcess = null; }
+		}
+
+		// Close the gamepad input stream so we don't get stuck on blocking IO.
+		if (in != null)
+		{
+			try { in.close(); }
+			catch (Exception ignored) { }
+			in = null;
+		}
+	}
+}

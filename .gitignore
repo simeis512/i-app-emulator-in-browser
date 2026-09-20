@@ -1,0 +1,27 @@
+# Private applications, saves and analysis must never enter this repository.
+*.jar
+*.jam
+*.sp
+*.class
+*.zip
+*.bin
+*.oob
+*.rms
+*.sav
+*.log
+/games/
+/web/games/
+/web/games.json
+/analysis/
+/test-results/
+/private/
+/build/
+/dist/
+/.runtime/
+/freej2me_system/
+__pycache__/
+node_modules/
+playwright-report/
+test-results/
+.env
+.env.*
