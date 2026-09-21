@@ -8,10 +8,18 @@ public class TestIappli extends IApplication {
     public void start() { Display.setCurrent(new TestCanvas()); }
     static class TestCanvas extends Canvas implements Runnable {
         int x=16, frames;
+        AudioPresenter music, effect;
         TestCanvas() {
             try(DataInputStream in=Connector.openDataInputStream("scratchpad:///0")) {
                 x=in.readInt();if(x<8 || x>200)x=16;
             }catch(Exception ignored){}
+            try {
+                MediaSound melody=MediaManager.getSound("resource:///fixture.mid");melody.use();
+                music=AudioPresenter.getAudioPresenter(0);music.setSound(melody);
+                music.setAttribute(AudioPresenter.LOOP_COUNT,-1);music.play();
+                MediaSound pcm=MediaManager.getSound("resource:///fixture.wav");pcm.use();
+                effect=AudioPresenter.getAudioPresenter(1);effect.setSound(pcm);
+            }catch(Exception e){throw new RuntimeException(e);}
             save();new Thread(this).start();
         }
         void save() {
@@ -22,6 +30,11 @@ public class TestIappli extends IApplication {
             if(type!=Display.KEY_PRESSED_EVENT)return;
             if(key==Display.KEY_RIGHT)x=Math.min(200,x+20);
             if(key==Display.KEY_LEFT)x=Math.max(8,x-20);
+            if(key==Display.KEY_1)effect.play();
+            if(key==Display.KEY_3)music.setAttribute(AudioPresenter.SET_VOLUME,0);
+            if(key==Display.KEY_4)music.setAttribute(AudioPresenter.SET_VOLUME,100);
+            if(key==Display.KEY_5)music.pause();
+            if(key==Display.KEY_6)music.restart();
             save();
         }
         public void paint(Graphics g) {

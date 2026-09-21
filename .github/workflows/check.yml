@@ -28,6 +28,15 @@ jobs:
           python check.py
           node --test tests/loader.test.mjs
           python -m unittest discover -s tests -p 'test_*.py'
+      - name: Render original audio fixtures in Chromium
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+          python serve.py > /tmp/iapp-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          python -c "import urllib.request,time; time.sleep(1); urllib.request.urlopen('http://127.0.0.1:9052/__iapp/status').read()"
+          npm run test:audio
       - uses: actions/upload-artifact@v4
         with:
           name: emulator-with-source

@@ -13,7 +13,7 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
 - Vendored files are unmodified. `build.py` generates patches under `build/patched/`.
 - Changes: browser frontend bridge, scratchpad offsets/boundaries and repeated
   close handling, PhoneSystem attribute validation, image clipping, log capture,
-  muted music clock and DoJa synchronization callbacks.
+  music clock, browser volume/tempo routing and DoJa synchronization callbacks.
 
 Separately licensed components retained from that snapshot:
 
@@ -61,6 +61,12 @@ credits. Self-hosting and redistribution of the CheerpJ runtime require separate
 rights. Check the current provider terms for your deployment.
 
 ## Distribution
+
+`web/audio.mjs` implements original procedural oscillators and percussion, plus
+PCM playback. It includes no soundfont, sampled instruments, game audio or device
+ROM data. MLD-to-MIDI/PCM decoding uses the retained FreeJ2ME-Plus implementation;
+decoded application audio stays in the user's browser. Web Audio is a browser API,
+not an additional bundled library.
 
 When distributing built emulator JARs or serving them to browsers, provide the
 corresponding source, build scripts, vendored sources and license notices for

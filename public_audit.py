@@ -33,18 +33,22 @@ licenses/Apache-2.0.txt
 licenses/LGPL-2.0.txt
 licenses/MIT-micro3d.txt
 src/p905i/web/BrowserRuntime.java
+src/p905i/web/BrowserAudio.java
 src/p905i/web/ClockPlayer.java
 src-ogl/p905i/web/FogState.java
 tests/RuntimeChecks.java
+tests/AudioChecks.java
 tests/OglChecks.java
 tests/TestIappli.java
 tests/build_fixture.py
 tests/browser.cjs
+tests/audio.cjs
 tests/loader.test.mjs
 tests/test_server.py
 web/index.html
 web/app.js
 web/loader.mjs
+web/audio.mjs
 web/style.css
 '''.split()
 

@@ -38,6 +38,25 @@ async function main() {
     }
     console.log('Browser: boot original 2D fixture');
     await boot();
+    await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
+    const initialAudio=await page.evaluate(()=>window.iapp.audioStats());
+    assert.equal(initialAudio.state,'running');assert.ok(initialAudio.loaded>=2);
+    await page.keyboard.press('3');
+    await page.waitForTimeout(250);
+    assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'application volume zero');
+    await page.keyboard.press('1');
+    await page.waitForFunction(()=>window.iapp.audioStats().pcm>=1&&window.iapp.audioStats().rms>0.001);
+    await page.keyboard.press('4');
+    await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
+    await page.keyboard.press('5');await page.waitForTimeout(300);
+    assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'pause silences voices');
+    await page.keyboard.press('6');await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
+    await page.locator('#sound').uncheck();await page.waitForTimeout(250);
+    assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'UI mute');
+    await page.locator('#sound').check();await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
+    await page.locator('#screen').focus();
+    assert.deepEqual((await page.evaluate(()=>window.iapp.audioStats())).errors,[]);
+    console.log('PASS audio waveform, PCM effect, app volume, pause/resume and UI mute');
     assert.equal((await save()).readInt32BE(0),16);
     assert.deepEqual(await pixel(20,95),[120,210,255,255]);
     await page.keyboard.press('ArrowRight');
@@ -65,6 +84,7 @@ async function main() {
 
     console.log('Browser: boot with Java 17 and optional OGL adapter');
     await boot('ogl');
+    await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     assert.deepEqual(errors,[]);

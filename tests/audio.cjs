@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Actual offline Web Audio rendering. All notes and PCM are authored test data.
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+(async()=>{
+  const browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL?{channel:process.env.BROWSER_CHANNEL}:{})});
+  try {
+    const page=await browser.newPage();
+    await page.route('https://cjrtnc.leaningtech.com/**',route=>route.abort());
+    await page.goto(process.env.TEST_URL||'http://127.0.0.1:9052/');
+    const results=await page.evaluate(async()=>{
+      const {BrowserAudio,decodeWave}=await import('./audio.mjs');
+      const cases=[];
+      const rms=(data,start,end)=>{const a=Math.floor(start*44100),b=Math.floor(end*44100);let sum=0;for(let i=a;i<b;i++)sum+=data[i]**2;return Math.sqrt(sum/(b-a));};
+      const frequency=(data,start,end)=>{let count=0;for(let i=Math.floor(start*44100)+1;i<end*44100;i++)if(data[i-1]<=0&&data[i]>0)count++;return count/(end-start);};
+      async function render(events,{position=0,rate=1,before,after,duration=0.9}={}) {
+        const context=new OfflineAudioContext(2,44100,44100),audio=new BrowserAudio(context,{automatic:false});
+        audio.setMaster(1);audio.load(1,events,duration);before?.(audio,context);
+        audio.control(1,1,position,rate,1);audio.pump(1);after?.(audio);
+        const data=(await context.startRendering()).getChannelData(0);
+        const stats=audio.stats();audio.dispose();return {data,stats};
+      }
+      let result=await render([0,0xc0,8,0,0.02,0x90,69,100,0.6,0x80,69,0]);
+      cases.push({name:'A4 pitch and note-off',ok:rms(result.data,.1,.4)>.001&&Math.abs(frequency(result.data,.1,.4)-440)<8&&rms(result.data,.8,.95)<1e-5});
+      result=await render([0,0xc0,8,0,0,0x90,69,100,.3,0xe0,127,127,.7,0x80,69,0]);
+      cases.push({name:'pitch bend raises A4 by two semitones',ok:Math.abs(frequency(result.data,.4,.6)-493.88)<10});
+      result=await render([0,0x90,69,100,.1,0xb0,64,127,.2,0x80,69,0,.5,0xb0,64,0]);
+      cases.push({name:'sustain holds until pedal release',ok:rms(result.data,.3,.4)>.001&&rms(result.data,.75,.9)<1e-5});
+      result=await render([0,0xb0,7,0,0,0x90,69,100,.5,0x80,69,0],{position:.2});
+      cases.push({name:'seek restores controller volume',ok:rms(result.data,.05,.4)<1e-5});
+      result=await render([0,0x90,69,100,.6,0x80,69,0],{position:.3});
+      cases.push({name:'seek restores an active note then releases it',ok:rms(result.data,.05,.2)>.001&&rms(result.data,.5,.7)<1e-5});
+      result=await render([0,0xc0,8,0,0,0x90,69,100,.5,0x80,69,0],{rate:2});
+      cases.push({name:'tempo rate changes duration without MIDI pitch shift',ok:Math.abs(frequency(result.data,.08,.23)-440)<10&&rms(result.data,.4,.6)<1e-5});
+      result=await render([0,0x90,69,100,.6,0x80,69,0],{after:audio=>audio.control(1,2,0,1,1)});
+      cases.push({name:'stop cancels scheduled future sound',ok:rms(result.data,.1,.8)<1e-5});
+      result=await render([0,0x90,69,100,.6,0x80,69,0],{before:audio=>audio.sync(1,0,69)});
+      cases.push({name:'DoJa sync notes are not synthesized',ok:rms(result.data,.1,.8)<1e-5});
+      result=await render([0,0x99,36,127,.3,0x99,42,127]);
+      cases.push({name:'procedural percussion creates a decaying signal',ok:rms(result.data,.04,.12)>.001&&rms(result.data,.7,.9)<1e-5});
+      const wave=new Uint8Array(44+4410*2),view=new DataView(wave.buffer);
+      const text=(offset,s)=>[...s].forEach((c,i)=>wave[offset+i]=c.charCodeAt(0));
+      text(0,'RIFF');view.setUint32(4,wave.length-8,true);text(8,'WAVE');text(12,'fmt ');
+      view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+      view.setUint32(24,44100,true);view.setUint32(28,88200,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+      text(36,'data');view.setUint32(40,8820,true);
+      for(let i=0;i<4410;i++)view.setInt16(44+2*i,Math.round(20000*Math.sin(2*Math.PI*660*i/44100)),true);
+      result=await render([.1,256,0,100],{before:audio=>audio.sample(1,0,wave)});
+      cases.push({name:'PCM sample has its expected frequency and ends',ok:result.stats.pcm===1&&Math.abs(frequency(result.data,.12,.19)-660)<20&&rms(result.data,.4,.8)<1e-5});
+      let rejected=false;try{decodeWave(new OfflineAudioContext(1,100,44100),wave.subarray(0,50));}catch{rejected=true;}
+      cases.push({name:'truncated PCM rejected',ok:rejected});
+      return cases;
+    });
+    for(const result of results)console.log((result.ok?'PASS ':'FAIL ')+result.name);
+    assert.ok(results.every(result=>result.ok),'audio render checks failed');
+    console.log('ALL AUDIO RENDER CHECKS PASSED');
+  }finally{await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

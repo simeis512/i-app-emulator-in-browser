@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { addFiles, prepareApplication } from './loader.mjs';
+import { BrowserAudio } from './audio.mjs';
 const $ = id => document.getElementById(id);
 const canvas = $('screen'), ctx = canvas.getContext('2d', { alpha:false });
 let files = {}, runtime, application, booted = false, preparing = false;
 let frames = 0, imageData, polling = false, fpsFrames = 0, fpsTime = performance.now();
+let audio;
+function audioLevel(){return $('sound').checked?Number($('volume').value)/100:0;}
+async function prepareAudio() {
+  try {
+    if(!audio)audio=new BrowserAudio(new AudioContext({latencyHint:'interactive'}));
+    audio.setMaster(audioLevel());await audio.resume();
+    $('audio-status').textContent=$('sound').checked?'音声ON · 簡易音源':'消音';
+  }catch(error){$('audio-status').textContent='音声を開始できません: '+error.message;}
+}
+$('sound').onchange=()=>{if(audio)prepareAudio();};
+$('volume').oninput=()=>{if(audio)audio.setMaster(audioLevel());$('volume-value').textContent=$('volume').value+'%';};
+window.addEventListener('pagehide',()=>audio?.dispose());
 // CheerpJ permits one JS-to-Java entry call at a time. Input, status polling and
 // save downloads must share a queue, including when a key is still being handled.
 let javaQueue=Promise.resolve();
@@ -41,7 +54,10 @@ function lockInputs(locked) {
 async function start() {
   if(preparing) return;
   preparing=true;$('start').disabled=true;lockInputs(true);
+  // Create/resume the AudioContext within this explicit button gesture.
+  const audioReady=prepareAudio();
   try {
+    await audioReady;
     status('ファイルを検証しています…');
     application=await prepareApplication(files);
     $('warning').textContent=application.warning;$('warning').hidden=!application.warning;
@@ -55,7 +71,12 @@ async function start() {
     booted=true;$('app-name').textContent=application.name;
     status('Java実行環境を準備しています…');
     await cheerpjInit({version:ogl?17:8,status:'none',javaProperties:['file.encoding=Shift_JIS'],
-      natives:{async Java_p905i_web_BrowserRuntime_present(lib,pixels,width,height) {
+      natives:{
+      async Java_p905i_web_BrowserAudio_loadNative(lib,id,events,duration){audio?.load(id,events,duration);},
+      async Java_p905i_web_BrowserAudio_sampleNative(lib,id,index,bytes){audio?.sample(id,index,bytes);},
+      async Java_p905i_web_BrowserAudio_controlNative(lib,id,command,position,rate,volume){audio?.control(id,command,position,rate,volume);},
+      async Java_p905i_web_BrowserAudio_syncNative(lib,id,channel,key){audio?.sync(id,channel,key);},
+      async Java_p905i_web_BrowserRuntime_present(lib,pixels,width,height) {
         if(width!==canvas.width || height!==canvas.height) {
           canvas.width=width;canvas.height=height;imageData=ctx.createImageData(width,height);
         }
@@ -74,6 +95,7 @@ async function start() {
     $('log').textContent=application.warning;
     await javaCall(()=>runtime.start('/str/app.jar','/str/app.jam','/str/app.sp',`/files/iapp/${application.id}`,canvas.width,canvas.height,true));
     window.iapp={get frames(){return frames;},id:application.id,
+      audioStats:()=>audio?.stats(),
       getStatus:()=>javaCall(()=>runtime.getStatus()),
       exportScratchpad:()=>javaCall(()=>runtime.exportScratchpad())};
     $('export-save').disabled=application.sizes.length===0;
@@ -85,7 +107,10 @@ async function start() {
         if(state.startsWith('ERROR:'))status(`未対応の処理で停止: ${state.slice(7)}`,true);
         else if(state==='TERMINATED')status('アプリが終了しました。再起動できます。');
         else status(frames?'実行中 · 操作キーで進めてください。':'起動処理中…');
-        $('log').textContent=(application.warning?application.warning+'\n':'')+log;
+        if(state==='TERMINATED'||state.startsWith('ERROR:'))audio?.stopAll();
+        if(audio?.errors.length)$('audio-status').textContent='一部の音声を再生できません（実行ログを参照）';
+        $('log').textContent=(application.warning?application.warning+'\n':'')+log+
+          (audio?.errors.length?'\n'+audio.errors.join('\n'):'');
         const now=performance.now();$('fps').textContent=`${((frames-fpsFrames)*1000/(now-fpsTime)).toFixed(1)} fps`;
         fpsFrames=frames;fpsTime=now;
       }catch(error){status(String(error),true);}finally{polling=false;}

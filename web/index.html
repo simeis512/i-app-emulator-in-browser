@@ -11,8 +11,11 @@
 <ul id="file-list" class="file-list"></ul><button id="clear-files" type="button">選択をクリア</button>
 <label for="size">画面サイズ</label><select id="size"><option value="240,240">240 × 240</option><option value="240,320">240 × 320</option><option value="426,240">426 × 240（横長）</option><option value="480,480">480 × 480</option><option value="480,854">480 × 854</option></select>
 <label for="renderer">描画モード</label><select id="renderer"><option value="2d">2D（通常）</option><option value="ogl">OpenGL ES / 3D（実験的）</option></select>
+<div class="audio-controls"><label><input id="sound" type="checkbox" checked> 音声（試験中）</label>
+<label for="volume">音量 <span id="volume-value">30%</span></label><input id="volume" type="range" min="0" max="100" value="30">
+<p id="audio-status" class="note" role="status">簡易音源で再生します。端末の音色とは異なります。</p></div>
 <button id="start" class="primary">起動する</button>
-<p class="note">初回起動には実行環境の取得で時間がかかります。音声と通信は未対応。3Dは低速で、反射などの表現に制限があります。</p>
+<p class="note">初回起動には実行環境の取得で時間がかかります。音声はMLD／MIDIと一部PCMに対応。通信は未対応。3Dは低速で、反射などの表現に制限があります。</p>
 <div id="status" role="status">JARとJAMを選択してください。</div>
 <p id="warning" class="note" role="status" hidden></p>
 <h2>操作</h2><p class="note">方向キー・Enter／Space・数字キー。Zは左ソフトキー、Xは右ソフトキー。横持ちアプリはキーの向きが異なります。</p>

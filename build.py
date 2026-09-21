@@ -33,6 +33,8 @@ def patched_sources():
              'if(player instanceof p905i.web.ClockPlayer) controls[1] = new tempoControl(player);\n\t\t// Set up control interfaces based on player type.'),
             ('float factor = rate / 100000.0f;',
              'float factor = rate / 100000.0f;\n            if(player instanceof p905i.web.ClockPlayer) ((p905i.web.ClockPlayer)player).setRate(factor);'),
+            ('void applyVolume()\n\t\t{',
+             'void applyVolume()\n\t\t{\n            if(player instanceof p905i.web.ClockPlayer) { ((p905i.web.ClockPlayer)player).setVolume(isMuted() ? 0 : volume); return; }'),
         ],
         'com/nttdocomo/ui/AudioPresenter.java': [
             ('private int priority, loopCount', 'private int syncChannel = -1, syncKey = -1;\n\tprivate boolean syncMode;\n\tprivate int priority, loopCount'),

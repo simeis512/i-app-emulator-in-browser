@@ -36,6 +36,7 @@ public final class BrowserRuntime {
         Mobile.DoJaVersion = 51;
         Mobile.textEncoding = "Shift_JIS";
         Mobile.sound = false;
+        BrowserAudio.enable(browser);
         Mobile.limitFPS = 30;
         Mobile.maskIndex = 0;
         Mobile.minLogLevel = Mobile.LOG_INFO;
