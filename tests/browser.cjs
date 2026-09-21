@@ -4,6 +4,7 @@ const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {pathToFileURL} = require('node:url');
 const root = path.resolve(__dirname, '..');
 const baseURL = process.env.TEST_URL || 'http://127.0.0.1:9052/';
 const output = path.join(root, 'test-results');
@@ -41,6 +42,7 @@ async function main() {
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     const initialAudio=await page.evaluate(()=>window.iapp.audioStats());
     assert.equal(initialAudio.state,'running');assert.ok(initialAudio.loaded>=2);
+    assert.equal(initialAudio.instrument,'procedural');
     await page.keyboard.press('3');
     await page.waitForTimeout(250);
     assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'application volume zero');
@@ -67,6 +69,21 @@ async function main() {
     await page.locator('#screen').focus();
     assert.deepEqual((await page.evaluate(()=>window.iapp.audioStats())).errors,[]);
     console.log('PASS audio waveform, PCM effect, app volume, pause/resume and UI mute');
+    const {instrumentFixture}=await import(pathToFileURL(path.join(__dirname,'instrument-fixture.mjs')));
+    const fixture=instrumentFixture();
+    // The original Java fixture plays GM program 8; map it to our authored sine.
+    new DataView(fixture.bytes.buffer).setUint16(fixture.offsets.groups[0]+1+8*2,0,true);
+    await page.locator('.instrument-controls summary').click();
+    await page.locator('#instrument-file').setInputFiles({name:'authored.bin',mimeType:'application/octet-stream',buffer:Buffer.from(fixture.bytes)});
+    await page.waitForFunction(()=>iapp.audioStats().instrument==='FTRM v1'&&iapp.audioStats().bankNotes>0&&iapp.audioStats().rms>.001);
+    await page.locator('#instrument-file').setInputFiles({name:'broken.bin',mimeType:'application/octet-stream',buffer:Buffer.from('broken')});
+    await page.waitForFunction(()=>document.querySelector('#instrument-status').textContent.includes('現在の音色を継続'));
+    assert.equal((await page.evaluate(()=>iapp.audioStats())).instrument,'FTRM v1');
+    await page.locator('#reset-instrument').click();
+    await page.waitForFunction(()=>iapp.audioStats().instrument==='procedural'&&iapp.audioStats().rms>.001);
+    await page.locator('.instrument-controls summary').click();await page.locator('#screen').focus();
+    assert.deepEqual((await page.evaluate(()=>iapp.audioStats())).errors,[]);
+    console.log('PASS live instrument swap, malformed-bank retention and return to default');
     assert.equal((await save()).readInt32BE(0),16);
     assert.deepEqual(await pixel(20,95),[120,210,255,255]);
     await page.keyboard.press('ArrowRight');
@@ -84,6 +101,7 @@ async function main() {
 
     console.log('Browser: reload and restore browser save over original SP');
     await boot();
+    assert.equal((await page.evaluate(()=>iapp.audioStats())).instrument,'procedural');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     await page.setViewportSize({width:390,height:844});

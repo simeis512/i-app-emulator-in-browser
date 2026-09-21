@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Original procedural instruments. No soundfont, recordings or device ROM data.
+// Original procedural default, with optional user-supplied sample banks.
+// No soundfont, recordings or device ROM data are bundled.
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
 export function decodeWave(context,input) {
@@ -40,8 +41,8 @@ export function decodeWave(context,input) {
 }
 
 export class MidiSynth {
-  constructor(context,destination,noise,counters) {
-    this.context=context;this.noise=noise;this.counters=counters;this.voices=new Set();
+  constructor(context,destination,noise,counters,bank=null) {
+    this.context=context;this.noise=noise;this.counters=counters;this.voices=new Set();this.bank=bank;
     this.channels=Array.from({length:16},()=>{
       const gain=context.createGain(),pan=context.createStereoPanner();gain.connect(pan);pan.connect(destination);
       return {gain,pan,volume:100/127,expression:1,bend:0,bendValue:0,bendSemitones:2,bendCents:0,
@@ -123,7 +124,23 @@ export class MidiSynth {
       };
       source.start(when);return source;
     };
-    if(note.channel===9) {
+    const instrument=this.bank?.resolve(channel.program,note.key,note.channel===9);
+    if(instrument){
+      this.counters.bankNotes++;voice.release=instrument.release;
+      gain.gain.cancelScheduledValues(when);gain.gain.setValueAtTime(0,when);
+      gain.gain.linearRampToValueAtTime(peak*instrument.gain,when+instrument.attack);
+      gain.gain.setTargetAtTime(peak*instrument.gain*instrument.sustain,when+instrument.attack,instrument.decay);
+      if(instrument.sustain===0)voice.stopAt=when+instrument.attack+instrument.decay*8;
+      for(const layer of instrument.layers){
+        const source=context.createBufferSource(),level=context.createGain();
+        source.buffer=this.bank.buffer(context,layer.index);source.playbackRate.value=layer.rate;
+        source.loop=layer.loop;source.loopStart=layer.loopStart;source.loopEnd=layer.loopEnd;
+        level.gain.value=layer.gain;
+        if(note.channel!==9){source.detune.setValueAtTime(channel.bend,when);channel.modulator?.depth.connect(source.detune);}
+        add(source,level);if(Number.isFinite(voice.stopAt))source.stop(voice.stopAt);
+      }
+    } else if(note.channel===9) {
+      if(this.bank)this.counters.bankFallbacks++;
       const kick=[35,36].includes(note.key),tom=[41,43,45,47,48,50].includes(note.key);
       const length=kick?0.22:tom?0.25:[42,44].includes(note.key)?0.07:note.key===46?0.3:0.45;
       voice.stopAt=when+length;
@@ -139,6 +156,7 @@ export class MidiSynth {
       }
       gain.gain.exponentialRampToValueAtTime(0.0001,when+length);
     } else {
+      if(this.bank)this.counters.bankFallbacks++;
       const oscillator=context.createOscillator(),filter=context.createBiquadFilter();
       const family=channel.program>>3;
       oscillator.type=['triangle','sine','sine','triangle','sawtooth','sawtooth','triangle','sawtooth','square','triangle','square','sawtooth','sine','sine','triangle','sine'][family];
@@ -150,7 +168,7 @@ export class MidiSynth {
   }
   finish(note,when,immediate=false) {
     const voice=note?.voice;if(!voice||voice.finished)return;voice.finished=true;
-    const release=immediate?0.004:0.06;
+    const release=immediate?0.004:(voice.release??0.06);
     voice.gain.gain.cancelAndHoldAtTime(when);voice.gain.gain.linearRampToValueAtTime(0,when+release);
     for(const source of voice.sources)try{source.stop(Math.min(voice.stopAt,when+release+0.001));}catch{}
     // A voice scheduled for release must no longer consume a polyphony slot.
@@ -165,7 +183,8 @@ export class MidiSynth {
 
 export class BrowserAudio {
   constructor(context,{automatic=true}={}) {
-    this.context=context;this.players=new Map();this.counters={notes:0,pcm:0,loaded:0,samples:0};this.errors=[];
+    this.context=context;this.players=new Map();this.counters={notes:0,pcm:0,loaded:0,samples:0,bankNotes:0,bankFallbacks:0};this.errors=[];
+    this.instrumentBank=null;
     this.master=context.createGain();this.master.gain.value=0.3;
     this.limiter=context.createDynamicsCompressor();this.limiter.threshold.value=-6;this.limiter.ratio.value=12;
     this.analyser=context.createAnalyser();this.analyser.fftSize=2048;
@@ -180,6 +199,17 @@ export class BrowserAudio {
     this.reset(player,position,this.context.currentTime+0.01);
   }}
   setMaster(value){this.master.gain.setTargetAtTime(clamp(value,0,1),this.context.currentTime,0.01);}
+  setInstrumentBank(bank){
+    if(bank===this.instrumentBank)return;
+    this.instrumentBank=bank;const now=this.context.currentTime;
+    // Re-chase current notes/controllers at the same transport position. The
+    // application's Java music clock, sync callbacks and tempo remain untouched.
+    for(const player of this.players.values())if(player.running){
+      const position=Math.max(0,player.position+(now-player.anchor)*player.rate);
+      if(player.duration<0||position<player.duration)this.reset(player,position,now+0.01);
+    }
+    this.pump();
+  }
   load(id,events,duration) {
     this.close(id);const data=Float64Array.from(events);
     if(data.length%4||!Number.isFinite(duration))throw new Error('Invalid audio timeline');
@@ -213,7 +243,7 @@ export class BrowserAudio {
     this.clearSound(player);player.position=position;player.wallStart=performance.now();player.anchor=when;
     player.lastPump=this.context.currentTime;player.ended=false;player.index=0;
     player.gain=this.context.createGain();player.gain.gain.value=player.volume;player.gain.connect(this.master);
-    player.synth=new MidiSynth(this.context,player.gain,this.noise,this.counters);
+    player.synth=new MidiSynth(this.context,player.gain,this.noise,this.counters,this.instrumentBank);
     const priorPcm=new Map(),events=player.events;
     while(player.index<events.length&&events[player.index]<position) {
       const i=player.index,time=events[i],status=events[i+1],a=events[i+2],b=events[i+3];player.index+=4;
@@ -259,9 +289,9 @@ export class BrowserAudio {
   stopAll(){for(const player of this.players.values()){player.running=false;this.clearSound(player);}}
   stats(){
     const samples=new Float32Array(this.analyser.fftSize);this.analyser.getFloatTimeDomainData(samples);
-    return {...this.counters,state:this.context.state,players:this.players.size,
+    return {...this.counters,state:this.context.state,players:this.players.size,instrument:this.instrumentBank?.format||'procedural',
       playing:[...this.players.values()].filter(player=>player.running).length,
       rms:Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length),errors:[...this.errors]};
   }
-  dispose(){clearInterval(this.timer);this.stopAll();this.players.clear();this.master.disconnect();this.limiter.disconnect();this.analyser.disconnect();}
+  dispose(){clearInterval(this.timer);this.stopAll();this.players.clear();this.instrumentBank=null;this.master.disconnect();this.limiter.disconnect();this.analyser.disconnect();}
 }

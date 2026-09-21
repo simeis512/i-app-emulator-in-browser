@@ -45,11 +45,14 @@ tests/build_fixture.py
 tests/browser.cjs
 tests/audio.cjs
 tests/loader.test.mjs
+tests/instruments.test.mjs
+tests/instrument-fixture.mjs
 tests/test_server.py
 web/index.html
 web/app.js
 web/loader.mjs
 web/audio.mjs
+web/instruments.mjs
 web/style.css
 '''.split()
 
@@ -73,8 +76,9 @@ def audit(tracked=False):
         if any(parent.is_symlink() or (hasattr(parent,'is_junction') and parent.is_junction())
                for parent in path.parents if parent!=ROOT and parent.is_relative_to(ROOT)):
             raise ValueError('Linked publication input: '+name)
-        if path.suffix.lower() in {'.jar','.jam','.sp','.zip','.class','.bin','.rms','.sav','.oob'}:
-            raise ValueError('Application, save or build output in source list: '+name)
+        if path.suffix.lower() in {'.jar','.jam','.sp','.zip','.class','.bin','.rms','.sav','.oob',
+                                  '.dll','.sf2','.sf3','.dls','.__mime','.wav'}:
+            raise ValueError('Application, save, sound bank or build output in source list: '+name)
         if name in OWN_FILES and name not in {'NOTICE.txt','LICENSE'}:
             text=path.read_text(encoding='utf-8')
             if re.search(r'[A-Za-z]:[\\/](?:Users|p905i_dump)[\\_]|astra[_]recovery|P905i[_]recovered[_]apps',text):
@@ -88,7 +92,7 @@ def audit(tracked=False):
             raise ValueError('Git index differs from allowlist; extra='+str(sorted(registered-set(names)))+
                              '; missing='+str(sorted(set(names)-registered)))
         subprocess.run(['git','-C',str(ROOT),'diff','--exit-code','--quiet'],check=True)
-    print('PUBLIC AUDIT PASSED:',len(names),'allowlisted source files; no application binaries or saves')
+    print('PUBLIC AUDIT PASSED:',len(names),'allowlisted source files; no application binaries, saves or sound banks')
     return names
 
 if __name__=='__main__':

@@ -1,21 +1,44 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { addFiles, prepareApplication } from './loader.mjs';
 import { BrowserAudio } from './audio.mjs';
+import { readInstrumentFile } from './instruments.mjs';
 const $ = id => document.getElementById(id);
 const canvas = $('screen'), ctx = canvas.getContext('2d', { alpha:false });
 let files = {}, runtime, application, booted = false, preparing = false;
 let frames = 0, imageData, polling = false, fpsFrames = 0, fpsTime = performance.now();
-let audio;
+let audio,instrumentBank=null,instrumentName='',instrumentRequest=0;
 function audioLevel(){return $('sound').checked?Number($('volume').value)/100:0;}
+function showAudioStatus(){
+  $('audio-status').textContent=$('sound').checked?
+    (instrumentBank?'音声ON · 外部音色（近似再生）':'音声ON · 標準の簡易音源'):'消音';
+}
 async function prepareAudio() {
   try {
-    if(!audio)audio=new BrowserAudio(new AudioContext({latencyHint:'interactive'}));
+    if(!audio){audio=new BrowserAudio(new AudioContext({latencyHint:'interactive'}));audio.setInstrumentBank(instrumentBank);}
     audio.setMaster(audioLevel());await audio.resume();
-    $('audio-status').textContent=$('sound').checked?'音声ON · 簡易音源':'消音';
+    showAudioStatus();
   }catch(error){$('audio-status').textContent='音声を開始できません: '+error.message;}
 }
-$('sound').onchange=()=>{if(audio)prepareAudio();};
+$('sound').onchange=()=>{if(audio)prepareAudio();else showAudioStatus();};
 $('volume').oninput=()=>{if(audio)audio.setMaster(audioLevel());$('volume-value').textContent=$('volume').value+'%';};
+$('instrument-file').onchange=async event=>{
+  const file=event.target.files[0];event.target.value='';if(!file)return;
+  const request=++instrumentRequest;$('instrument-status').textContent='音色ファイルを読み込んでいます…';
+  $('reset-instrument').disabled=false;
+  try{
+    const bank=await readInstrumentFile(file);if(request!==instrumentRequest)return;
+    audio?.setInstrumentBank(bank);instrumentBank=bank;instrumentName=file.name;
+    $('instrument-status').textContent=`${instrumentName} · 楽器 ${bank.programCount} / 打楽器 ${bank.drumCount}。未対応の音色は標準音源で補います。`;
+    showAudioStatus();
+  }catch(error){
+    if(request!==instrumentRequest)return;
+    $('instrument-status').textContent=error.message+' '+(instrumentBank?`現在の音色を継続: ${instrumentName}`:'標準の簡易音源を継続します。');
+  }finally{if(request===instrumentRequest)$('reset-instrument').disabled=!instrumentBank;}
+};
+$('reset-instrument').onclick=()=>{
+  ++instrumentRequest;audio?.setInstrumentBank(null);instrumentBank=null;instrumentName='';
+  $('instrument-status').textContent='標準の簡易音源を使用中';$('reset-instrument').disabled=true;showAudioStatus();
+};
 window.addEventListener('pagehide',()=>audio?.dispose());
 // CheerpJ permits one JS-to-Java entry call at a time. Input, status polling and
 // save downloads must share a queue, including when a key is still being handled.

@@ -5,6 +5,12 @@
 *.class
 *.zip
 *.bin
+*.dll
+*.sf2
+*.sf3
+*.dls
+*.__mime
+/soundbanks/
 *.oob
 *.rms
 *.sav

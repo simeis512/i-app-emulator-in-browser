@@ -2,14 +2,20 @@
 // Actual offline Web Audio rendering. All notes and PCM are authored test data.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
+const path=require('node:path');
+const {pathToFileURL}=require('node:url');
 (async()=>{
   const browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL?{channel:process.env.BROWSER_CHANNEL}:{})});
   try {
     const page=await browser.newPage();
     await page.route('https://cjrtnc.leaningtech.com/**',route=>route.abort());
     await page.goto(process.env.TEST_URL||'http://127.0.0.1:9052/');
-    const results=await page.evaluate(async()=>{
+    const {instrumentFixture}=await import(pathToFileURL(path.join(__dirname,'instrument-fixture.mjs')));
+    const bankBytes=Array.from(instrumentFixture().bytes);
+    const results=await page.evaluate(async bankBytes=>{
       const {BrowserAudio,decodeWave}=await import('./audio.mjs');
+      const {parseInstrumentBank}=await import('./instruments.mjs');
+      const bank=parseInstrumentBank(Uint8Array.from(bankBytes));
       const cases=[];
       const rms=(data,start,end)=>{const a=Math.floor(start*44100),b=Math.floor(end*44100);let sum=0;for(let i=a;i<b;i++)sum+=data[i]**2;return Math.sqrt(sum/(b-a));};
       const frequency=(data,start,end)=>{let count=0;for(let i=Math.floor(start*44100)+1;i<end*44100;i++)if(data[i-1]<=0&&data[i]>0)count++;return count/(end-start);};
@@ -64,10 +70,48 @@ const assert=require('node:assert/strict');
       cases.push({name:'PCM sample has its expected frequency and ends',ok:result.stats.pcm===1&&Math.abs(frequency(result.data,.12,.19)-660)<20&&rms(result.data,.4,.8)<1e-5});
       let rejected=false;try{decodeWave(new OfflineAudioContext(1,100,44100),wave.subarray(0,50));}catch{rejected=true;}
       cases.push({name:'truncated PCM rejected',ok:rejected});
+      const external=audio=>audio.setInstrumentBank(bank);
+      result=await render([0,0x90,60,100,.6,0x80,60,0],{before:external});
+      cases.push({name:'external bank loops its own 500 Hz wave and releases',ok:result.stats.bankNotes===1&&Math.abs(frequency(result.data,.1,.4)-500)<8&&rms(result.data,.85,.95)<1e-5});
+      result=await render([0,0xc0,1,0,0,0x90,60,100,.6,0x80,60,0],{before:external});
+      cases.push({name:'external program change selects a different waveform',ok:Math.abs(frequency(result.data,.1,.4)-1000)<8});
+      result=await render([0,0x90,72,100,.6,0x80,72,0],{before:external});
+      cases.push({name:'sample bank transposes up an octave',ok:Math.abs(frequency(result.data,.1,.4)-1000)<8});
+      result=await render([0,0xb0,101,0,0,0xb0,100,0,0,0xb0,6,12,0,0xe0,127,127,0,0x90,60,100,.8,0x80,60,0],{before:external,position:.2});
+      cases.push({name:'external bank seek restores held notes and pitch bend range',ok:Math.abs(frequency(result.data,.1,.4)-1000)<8});
+      result=await render([0,0x90,60,100,.1,0xb0,64,127,.2,0x80,60,0,.5,0xb0,64,0],{before:external});
+      cases.push({name:'external bank sustain and release work',ok:rms(result.data,.3,.4)>.001&&rms(result.data,.8,.9)<1e-5});
+      result=await render([0,0x99,36,100,.6,0x89,36,0],{before:external});
+      cases.push({name:'external percussion uses its fixed-pitch sample',ok:result.stats.bankNotes===1&&Math.abs(frequency(result.data,.1,.4)-500)<8});
+      result=await render([0,0xc0,8,0,0,0x90,69,100,.6,0x80,69,0],{before:external});
+      cases.push({name:'missing external instrument falls back to procedural synth',ok:result.stats.bankNotes===0&&result.stats.bankFallbacks===1&&Math.abs(frequency(result.data,.1,.4)-440)<8});
+      result=await render([0,0xc0,3,0,0,0x90,69,100,.6,0x80,69,0],{before:external});
+      cases.push({name:'unsupported native noise instrument falls back audibly',ok:result.stats.bankFallbacks===1&&rms(result.data,.1,.4)>.001});
+      result=await render([0,0x90,60,100,.6,0x80,60,0],{before:external,after:audio=>audio.setInstrumentBank(null)});
+      cases.push({name:'switching back cancels queued sampled voices',ok:result.stats.instrument==='procedural'&&Math.abs(frequency(result.data,.1,.4)-261.63)<8});
+      result=await render([.1,256,0,100],{before:audio=>{external(audio);audio.sample(1,0,wave);}});
+      cases.push({name:'application PCM effects still play with an external instrument bank',ok:result.stats.pcm===1&&Math.abs(frequency(result.data,.12,.19)-660)<20});
       return cases;
-    });
+    },bankBytes);
     for(const result of results)console.log((result.ok?'PASS ':'FAIL ')+result.name);
     assert.ok(results.every(result=>result.ok),'audio render checks failed');
+    // File picker and transaction semantics, without booting CheerpJ or using a
+    // third-party bank. No requests may be sent by the bank selection itself.
+    const requests=[];page.on('request',request=>requests.push(request.url()));
+    await page.locator('.instrument-controls summary').click();
+    await page.locator('#instrument-file').setInputFiles({name:'authored.bin',mimeType:'application/octet-stream',buffer:Buffer.from(bankBytes)});
+    await page.waitForFunction(()=>document.querySelector('#instrument-status').textContent.includes('楽器 4'));
+    await page.locator('#instrument-file').setInputFiles({name:'broken.bin',mimeType:'application/octet-stream',buffer:Buffer.from('broken')});
+    await page.waitForFunction(()=>document.querySelector('#instrument-status').textContent.includes('現在の音色を継続: authored.bin'));
+    await page.locator('#reset-instrument').click();
+    assert.match(await page.locator('#instrument-status').textContent(),/標準の簡易音源を使用中/);
+    await page.locator('#instrument-file').setInputFiles({name:'authored.bin',mimeType:'application/octet-stream',buffer:Buffer.from(bankBytes)});
+    await page.waitForFunction(()=>document.querySelector('#instrument-status').textContent.includes('楽器 4'));
+    assert.deepEqual(requests,[],'instrument selection must not send data or fetch a bank');
+    await page.reload();
+    assert.match(await page.locator('#instrument-status').textContent(),/標準の簡易音源を使用中/);
+    assert.equal(await page.locator('#reset-instrument').isDisabled(),true);
+    console.log('PASS external bank file picker, failed-load retention, reset, reload and no network request');
     console.log('ALL AUDIO RENDER CHECKS PASSED');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

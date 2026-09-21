@@ -26,7 +26,7 @@ jobs:
       - name: Test runtime, renderer, loader and local server
         run: |
           python check.py
-          node --test tests/loader.test.mjs
+          npm test
           python -m unittest discover -s tests -p 'test_*.py'
       - name: Render original audio fixtures in Chromium
         run: |
