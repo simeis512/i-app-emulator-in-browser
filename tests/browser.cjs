@@ -46,6 +46,16 @@ async function main() {
     assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'application volume zero');
     await page.keyboard.press('1');
     await page.waitForFunction(()=>window.iapp.audioStats().pcm>=1&&window.iapp.audioStats().rms>0.001);
+    await page.waitForTimeout(300);
+    const beforeAdpcm=await page.evaluate(()=>window.iapp.audioStats().pcm);
+    for(let i=1;i<=3;i++){
+      await page.keyboard.press('2');
+      await page.waitForFunction(count=>window.iapp.audioStats().pcm>=count&&window.iapp.audioStats().rms>0.001,beforeAdpcm+i);
+      await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(450);
+    assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'ADPCM sample ends after rapid retriggering');
+    console.log('PASS 2-bit MLD ADPCM waveform, repeated triggers and sample end');
     await page.keyboard.press('4');
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     await page.keyboard.press('5');await page.waitForTimeout(300);
@@ -85,6 +95,11 @@ async function main() {
     console.log('Browser: boot with Java 17 and optional OGL adapter');
     await boot('ogl');
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
+    await page.keyboard.press('3');await page.waitForTimeout(250);
+    await page.keyboard.press('2');
+    await page.waitForFunction(()=>window.iapp.audioStats().pcm>=1&&window.iapp.audioStats().rms>0.001);
+    assert.deepEqual((await page.evaluate(()=>window.iapp.audioStats())).errors,[]);
+    console.log('PASS Java 17 2-bit ADPCM waveform');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     assert.deepEqual(errors,[]);

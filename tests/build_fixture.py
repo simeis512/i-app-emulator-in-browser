@@ -12,9 +12,16 @@ pcm=io.BytesIO()
 with wave.open(pcm,'wb') as wav:
     wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(22050)
     wav.writeframes(b''.join(struct.pack('<h',int(14000*math.sin(2*math.pi*660*i/22050))) for i in range(4410)))
+# Original packed test codes in a minimal MFi ADAT container (not game audio).
+adat=struct.pack('>HBB',11,0x81,0)+b'adpm'+struct.pack('>HBBB',3,16,2,1)+bytes((i*37+19)&255 for i in range(1600))
+events=bytes([0,0x7f,0x80,0x3f,96,0xff,0xdf,0])
+body=struct.pack('>HBBB',11,1,1,1)+b'ainf'+struct.pack('>HBB',2,1,0)
+body+=b'adat'+struct.pack('>I',len(adat))+adat+b'trac'+struct.pack('>I',len(events))+events
+mld=b'melo'+struct.pack('>I',len(body))+body
 with zipfile.ZipFile(output/'fixture.jar','w',zipfile.ZIP_DEFLATED) as z:
     for p in sorted(classes.rglob('*.class')):z.write(p,p.relative_to(classes).as_posix())
     z.writestr('fixture.mid',midi);z.writestr('fixture.wav',pcm.getvalue())
+    z.writestr('fixture.mld',mld)
 (output/'fixture.jam').write_text('AppName=Original Test Fixture\nAppClass=TestIappli\nSPsize=16\n',encoding='ascii')
 (output/'fixture.sp').write_bytes((16).to_bytes(4,'big')+bytes(12))
 print('Built original fixture in',output)

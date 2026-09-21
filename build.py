@@ -26,6 +26,16 @@ def patched_sources():
     dst.write_text(MODIFIED+text, encoding='utf-8')
     patches = {rel: dst}
     for rel, replacements in {
+        'javax/microedition/media/decoders/MLDDecoder.java': [
+            ('if (chunkID.equals("adat"))      { decodeADATChunk(state); }',
+             '''if (chunkID.equals("adat")) {
+                state.readChunkId();
+                int length = state.readChunkSize32();
+                byte[] pcm = p905i.web.MldPcm.decodeAdat(state.input, state.decodePos, length);
+                pcmData.add(pcm == null ? null : new ByteArrayInputStream(pcm));
+                state.decodePos += length;
+            }'''),
+        ],
         'org/recompile/mobile/PlatformPlayer.java': [
             ('if(Mobile.sound == false) { player = new BasicPlayer(); disableControls = true; }',
              'if(Mobile.sound == false) { player = new p905i.web.ClockPlayer(stream); }'),
@@ -75,6 +85,7 @@ def patched_sources():
 
 def build():
     verify('freej2me-plus')
+    verify('opendoja')
     BUILD.mkdir(exist_ok=True); WEB.mkdir(exist_ok=True)
     classes = BUILD / 'classes'; clean_classes(classes)
     patches = patched_sources()
@@ -82,6 +93,7 @@ def build():
                for p in (VENDOR/'src').rglob('*.java')
                if not {'libretro','win32pad'}.intersection(p.parts) and p.name != 'package-info.java']
     sources += list((ROOT/'src').rglob('*.java'))
+    sources.append(ROOT/'vendor/openDoJa-master/src/main/java/opendoja/audio/mld/MLDNativeADPCMDecoder.java')
     sources.sort(key=lambda p:p.as_posix())
     argfile = BUILD/'sources.txt'
     argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources), encoding='utf-8')

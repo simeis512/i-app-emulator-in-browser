@@ -44,11 +44,28 @@ export class MidiSynth {
     this.context=context;this.noise=noise;this.counters=counters;this.voices=new Set();
     this.channels=Array.from({length:16},()=>{
       const gain=context.createGain(),pan=context.createStereoPanner();gain.connect(pan);pan.connect(destination);
-      return {gain,pan,volume:100/127,expression:1,bend:0,sustain:false,program:0,notes:new Map()};
+      return {gain,pan,volume:100/127,expression:1,bend:0,bendValue:0,bendSemitones:2,bendCents:0,
+        rpnMsb:127,rpnLsb:127,modulator:null,sustain:false,program:0,notes:new Map()};
     });
     for(const channel of this.channels)this.level(channel,context.currentTime);
   }
   level(channel,when){channel.gain.gain.setValueAtTime(channel.volume*channel.expression,when);}
+  pitch(index,when){
+    const channel=this.channels[index];channel.bend=channel.bendValue*(channel.bendSemitones*100+channel.bendCents);
+    if(index!==9)for(const note of channel.notes.values())for(const node of note.voice?.sources||[])
+      node.detune?.setValueAtTime(channel.bend,when);
+  }
+  modulation(index,value,when){
+    const channel=this.channels[index];if(index===9)return;
+    if(value>0&&!channel.modulator){
+      const oscillator=this.context.createOscillator(),depth=this.context.createGain();
+      // Approximate vibrato for the procedural instruments, not device-specific FM.
+      oscillator.frequency.value=6;depth.gain.value=0;oscillator.connect(depth);
+      for(const note of channel.notes.values())for(const source of note.voice?.sources||[])if(source.detune)depth.connect(source.detune);
+      channel.modulator={oscillator,depth};oscillator.start(when);
+    }
+    channel.modulator?.depth.gain.setValueAtTime(value/127*50,when);
+  }
   message(status,a,b,when,silent=false) {
     const index=status&15,channel=this.channels[index],command=status&240;
     if(command===0x90&&b>0) {
@@ -60,10 +77,16 @@ export class MidiSynth {
       if(note){note.down=false;if(!channel.sustain){this.finish(note,when);channel.notes.delete(a);}}
     } else if(command===0xc0)channel.program=a;
     else if(command===0xe0) {
-      channel.bend=((b<<7|a)-8192)/8192*200;
-      for(const note of channel.notes.values())for(const node of note.voice?.sources||[])
-        if(node.detune&&index!==9)node.detune.setValueAtTime(channel.bend,when);
+      channel.bendValue=((b<<7|a)-8192)/8192;this.pitch(index,when);
     } else if(command===0xb0) {
+      if(a===1)this.modulation(index,b,when);
+      if(a===101)channel.rpnMsb=b;
+      if(a===100)channel.rpnLsb=b;
+      if(a===98||a===99)channel.rpnMsb=channel.rpnLsb=127;
+      if((a===6||a===38)&&channel.rpnMsb===0&&channel.rpnLsb===0){
+        if(a===6)channel.bendSemitones=b;else channel.bendCents=b;
+        this.pitch(index,when);
+      }
       if(a===7){channel.volume=b/127;this.level(channel,when);}
       if(a===11){channel.expression=b/127;this.level(channel,when);}
       if(a===10)channel.pan.pan.setValueAtTime(clamp((b-64)/63,-1,1),when);
@@ -74,6 +97,7 @@ export class MidiSynth {
       if(a===120||a===123){for(const note of channel.notes.values())this.finish(note,when,a===120);channel.notes.clear();}
       if(a===121) {
         channel.volume=100/127;channel.expression=1;channel.bend=0;this.level(channel,when);
+        channel.rpnMsb=channel.rpnLsb=127;this.modulation(index,0,when);
         channel.pan.pan.setValueAtTime(0,when);this.message(0xb0|index,64,0,when,silent);
         this.message(0xe0|index,0,64,when,silent);
       }
@@ -92,6 +116,7 @@ export class MidiSynth {
       if(filter){source.connect(filter);filter.connect(gain);voice.filters.push(filter);}else source.connect(gain);
       voice.sources.push(source);
       source.onended=()=>{
+        if(source.detune&&channel.modulator)try{channel.modulator.depth.disconnect(source.detune);}catch{}
         source.disconnect();if(++voice.ended!==voice.sources.length)return;
         gain.disconnect();for(const filter of voice.filters)filter.disconnect();this.voices.delete(voice);
         if(channel.notes.get(note.key)===note)channel.notes.delete(note.key);
@@ -118,6 +143,7 @@ export class MidiSynth {
       const family=channel.program>>3;
       oscillator.type=['triangle','sine','sine','triangle','sawtooth','sawtooth','triangle','sawtooth','square','triangle','square','sawtooth','sine','sine','triangle','sine'][family];
       oscillator.frequency.value=440*Math.pow(2,(note.key-69)/12);oscillator.detune.setValueAtTime(channel.bend,when);
+      channel.modulator?.depth.connect(oscillator.detune);
       filter.type='lowpass';filter.frequency.value=family===4?1800:4500;filter.Q.value=0.5;
       add(oscillator,filter);gain.gain.exponentialRampToValueAtTime(peak*(family<=1?0.25:0.7),when+0.18);
     }
@@ -131,7 +157,10 @@ export class MidiSynth {
     this.voices.delete(voice);
   }
   stop(when){for(const channel of this.channels){for(const note of channel.notes.values())this.finish(note,when,true);channel.notes.clear();}}
-  dispose(){this.stop(this.context.currentTime);for(const channel of this.channels){channel.gain.disconnect();channel.pan.disconnect();}}
+  dispose(){this.stop(this.context.currentTime);for(const channel of this.channels){
+    channel.gain.disconnect();channel.pan.disconnect();
+    if(channel.modulator){channel.modulator.oscillator.stop();channel.modulator.oscillator.disconnect();channel.modulator.depth.disconnect();}
+  }}
 }
 
 export class BrowserAudio {

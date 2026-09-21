@@ -13,7 +13,8 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
 - Vendored files are unmodified. `build.py` generates patches under `build/patched/`.
 - Changes: browser frontend bridge, scratchpad offsets/boundaries and repeated
   close handling, PhoneSystem attribute validation, image clipping, log capture,
-  music clock, browser volume/tempo routing and DoJa synchronization callbacks.
+  music clock, browser volume/tempo routing, DoJa synchronization callbacks and
+  ADAT resource decoding that retains indices for unsupported samples.
 
 Separately licensed components retained from that snapshot:
 
@@ -42,6 +43,11 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
 - Snapshot commit: `0eb46a3905733458d1f7ded49cd1ba8dcc93511f`
 - License: GPL-3.0; full text at `vendor/openDoJa-master/LICENSE`.
 - Only the necessary Java source files and license are vendored.
+- The unmodified `opendoja/audio/mld/MLDNativeADPCMDecoder.java` is also compiled
+  into the Java 8 runtime. Our `MldPcm` adapter uses its 8/16 kHz mono 2-/4-bit
+  ADPCM decoder and reconstruction filter to produce 32 kHz PCM for Web Audio.
+  Its source comments retain the upstream algorithm/table provenance. No
+  FueTrek/MA-3 ROM, instrument bank, native DLL or other audio resource is bundled.
 - `build_ogl.py` generates changes under `build/ogl-src/`: software-only backend,
   shared framebuffer bridge, explicit unsupported API errors, color masks,
   secondary-texture limitation notices and perspective-triangle fog.
@@ -65,7 +71,8 @@ rights. Check the current provider terms for your deployment.
 `web/audio.mjs` implements original procedural oscillators and percussion, plus
 PCM playback. It includes no soundfont, sampled instruments, game audio or device
 ROM data. MLD-to-MIDI/PCM decoding uses the retained FreeJ2ME-Plus implementation;
-decoded application audio stays in the user's browser. Web Audio is a browser API,
+the native ADPCM path additionally uses the selected openDoJa decoder above.
+Decoded application audio stays in the user's browser. Web Audio is a browser API,
 not an additional bundled library.
 
 When distributing built emulator JARs or serving them to browsers, provide the

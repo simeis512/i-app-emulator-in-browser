@@ -13,6 +13,10 @@ const assert=require('node:assert/strict');
       const cases=[];
       const rms=(data,start,end)=>{const a=Math.floor(start*44100),b=Math.floor(end*44100);let sum=0;for(let i=a;i<b;i++)sum+=data[i]**2;return Math.sqrt(sum/(b-a));};
       const frequency=(data,start,end)=>{let count=0;for(let i=Math.floor(start*44100)+1;i<end*44100;i++)if(data[i-1]<=0&&data[i]>0)count++;return count/(end-start);};
+      const pitchSpan=(data,start,end)=>{
+        const crossings=[];for(let i=Math.floor(start*44100)+1;i<end*44100;i++)if(data[i-1]<=0&&data[i]>0)crossings.push(i-1-data[i-1]/(data[i]-data[i-1]));
+        const pitches=crossings.slice(1).map((time,i)=>44100/(time-crossings[i]));return Math.max(...pitches)-Math.min(...pitches);
+      };
       async function render(events,{position=0,rate=1,before,after,duration=0.9}={}) {
         const context=new OfflineAudioContext(2,44100,44100),audio=new BrowserAudio(context,{automatic:false});
         audio.setMaster(1);audio.load(1,events,duration);before?.(audio,context);
@@ -24,6 +28,17 @@ const assert=require('node:assert/strict');
       cases.push({name:'A4 pitch and note-off',ok:rms(result.data,.1,.4)>.001&&Math.abs(frequency(result.data,.1,.4)-440)<8&&rms(result.data,.8,.95)<1e-5});
       result=await render([0,0xc0,8,0,0,0x90,69,100,.3,0xe0,127,127,.7,0x80,69,0]);
       cases.push({name:'pitch bend raises A4 by two semitones',ok:Math.abs(frequency(result.data,.4,.6)-493.88)<10});
+      result=await render([0,0xc0,8,0,0,0xb0,101,0,0,0xb0,100,0,0,0xb0,6,12,
+        0,0xb0,101,127,0,0xb0,100,127,0,0xb0,6,1,0,0xe0,127,127,0,0x90,69,100,.7,0x80,69,0]);
+      cases.push({name:'RPN sets octave bend range and deselection protects it',ok:Math.abs(frequency(result.data,.1,.5)-880)<10});
+      result=await render([0,0xc0,8,0,0,0xb0,101,0,0,0xb0,100,0,0,0xe0,127,127,
+        0,0x90,69,100,.3,0xb0,6,12,.7,0x80,69,0]);
+      cases.push({name:'bend range changes affect already sounding notes',ok:Math.abs(frequency(result.data,.1,.25)-493.88)<10&&Math.abs(frequency(result.data,.4,.6)-880)<10});
+      result=await render([0,0xc0,8,0,0,0xb0,101,0,0,0xb0,100,0,0,0xb0,6,12,
+        0,0xe0,127,127,0,0x90,69,100,.8,0x80,69,0],{position:.2});
+      cases.push({name:'seek restores non-default bend range',ok:Math.abs(frequency(result.data,.1,.4)-880)<10});
+      result=await render([0,0xc0,8,0,0,0x90,69,100,.05,0xb0,1,127,.5,0xb0,1,0,.85,0x80,69,0]);
+      cases.push({name:'modulation adds vibrato and zero restores steady pitch',ok:pitchSpan(result.data,.15,.45)>15&&pitchSpan(result.data,.65,.8)<2});
       result=await render([0,0x90,69,100,.1,0xb0,64,127,.2,0x80,69,0,.5,0xb0,64,0]);
       cases.push({name:'sustain holds until pedal release',ok:rms(result.data,.3,.4)>.001&&rms(result.data,.75,.9)<1e-5});
       result=await render([0,0xb0,7,0,0,0x90,69,100,.5,0x80,69,0],{position:.2});

@@ -5,11 +5,62 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.sound.midi.*;
 import javax.microedition.media.*;
+import javax.microedition.media.decoders.MLDDecoder;
 import org.recompile.mobile.*;
 import p905i.web.ClockPlayer;
+import p905i.web.MldPcm;
 import com.nttdocomo.ui.*;
 
 public class AudioChecks {
+    // Authored ADPCM codes, not a recording or device/game asset.
+    static byte[] adat(int rate,int bits,int mode,boolean extraHeader)throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(bytes);
+        out.writeShort(extraHeader?19:11);out.writeByte(0x81);out.writeByte(0);
+        if(extraHeader){out.writeBytes("test");out.writeShort(2);out.writeShort(0);}
+        out.writeBytes("adpm");out.writeShort(3);out.writeByte(rate);out.writeByte(bits);out.writeByte(mode);
+        for(int i=0;i<64;i++)out.writeByte((i*37+19)&255);
+        return bytes.toByteArray();
+    }
+    static byte[] resourceMld(byte[]... resources)throws Exception{
+        ByteArrayOutputStream body=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(body);
+        out.writeShort(11);out.write(new byte[]{1,1,1});out.writeBytes("ainf");out.writeShort(2);
+        out.writeByte(resources.length);out.writeByte(0);
+        for(byte[] resource:resources){out.writeBytes("adat");out.writeInt(resource.length);out.write(resource);}
+        byte[] track={0,0x7f,(byte)0x80,0x7f,96,(byte)0xff,(byte)0xdf,0};
+        out.writeBytes("trac");out.writeInt(track.length);out.write(track);
+        ByteArrayOutputStream file=new ByteArrayOutputStream();out=new DataOutputStream(file);
+        out.writeBytes("melo");out.writeInt(body.size());out.write(body.toByteArray());return file.toByteArray();
+    }
+    static void adpcmChecks()throws Exception{
+        byte[] body=adat(16,2,1,false),wave=MldPcm.decodeAdat(body,0,body.length);
+        ByteBuffer pcm=ByteBuffer.wrap(wave).order(ByteOrder.LITTLE_ENDIAN);
+        require(pcm.getInt(24)==32000&&pcm.getShort(22)==1&&pcm.getShort(34)==16&&wave.length==1068,
+                "16 kHz 2-bit ADPCM produces 32 kHz mono 16-bit PCM");
+        require(ClockPlayer.waveDuration(wave)==16000,"2-bit upsampling preserves source duration");
+        int energy=0;for(int i=44;i<wave.length;i+=2)energy+=Math.abs((int)pcm.getShort(i));
+        require(energy>10000,"2-bit decoder produces a non-silent signal at PCM scale");
+        byte[] padded=adat(16,2,1,true);
+        require(Arrays.equals(wave,MldPcm.decodeAdat(padded,0,padded.length)),"ADAT subchunks do not leak into the audio payload");
+        body=adat(8,2,1,false);wave=MldPcm.decodeAdat(body,0,body.length);
+        require(wave.length==2092&&ClockPlayer.waveDuration(wave)==32000,"8 kHz 2-bit decoding preserves duration");
+        body=adat(16,4,1,false);wave=MldPcm.decodeAdat(body,0,body.length);
+        require(wave.length==556&&ClockPlayer.waveDuration(wave)==8000,"native 4-bit ADPCM also preserves source duration");
+        body[2]=(byte)0x82;wave=MldPcm.decodeAdat(body,0,body.length);
+        require(wave!=null&&Math.abs(ClockPlayer.waveDuration(wave)-8000)<100,"legacy 4-bit fallback remains decodable");
+        body=adat(16,16,1,false);body[2]=(byte)0x80;wave=MldPcm.decodeAdat(body,0,body.length);
+        require(ClockPlayer.waveDuration(wave)==2000&&Arrays.equals(Arrays.copyOfRange(wave,44,wave.length),Arrays.copyOfRange(body,13,body.length)),
+                "MLD PCM16 preserves little-endian samples");
+        for(byte[] unsupported:new byte[][]{adat(16,3,1,false),adat(16,2,2,false),adat(16,2,9,false),adat(32,2,1,false)})
+            require(MldPcm.decodeAdat(unsupported,0,unsupported.length)==null,"unsupported ADPCM format leaves an empty resource slot");
+        boolean rejected=false;try{MldPcm.decodeAdat(new byte[]{0,11,(byte)0x81,0},0,4);}catch(IllegalArgumentException expected){rejected=true;}
+        require(rejected,"truncated ADAT header rejected before decoding");
+        byte[] mld=resourceMld(adat(16,3,1,false),adat(16,2,1,false));
+        MLDDecoder.decodeMLD(mld);
+        require(MLDDecoder.pcmData.size()==2&&MLDDecoder.pcmData.get(0)==null&&MLDDecoder.pcmData.get(1).read()=='R',
+                "MLD parser retains resource indices after an unsupported sample");
+        ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(mld));
+        require(timeOf(clock.getAudioEvents(),256,1)==0&&clock.getDuration()>0,"MLD resource trigger reaches the shared audio timeline");
+    }
     static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);System.out.println("PASS "+message);}
     static byte[] bytes(Sequence sequence)throws Exception{
         ByteArrayOutputStream out=new ByteArrayOutputStream();MidiSystem.write(sequence,1,out);return out.toByteArray();
@@ -32,6 +83,7 @@ public class AudioChecks {
     public static void main(String[] args)throws Exception{
         try {
             Mobile.isDoJa=true;Mobile.sound=false;Mobile.minLogLevel=Mobile.LOG_NONE;
+            adpcmChecks();
             Sequence sequence=new Sequence(Sequence.PPQ,480);Track track=sequence.createTrack();
             midi(track,0,ShortMessage.PROGRAM_CHANGE,8,0);midi(track,0,ShortMessage.NOTE_ON,69,100);
             midi(track,480,ShortMessage.NOTE_OFF,69,0);

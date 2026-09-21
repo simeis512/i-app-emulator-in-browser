@@ -1243,6 +1243,7 @@
       "src/main/java/com/nttdocomo/ui/ogl/math/Vector3f.java": "3d3c72fd1958c4752980d47375b517bdcdb7251c4f02ae724684e40b1ca9e925",
       "src/main/java/com/nttdocomo/ui/ogl/math/Vector4f.java": "729bf1cd28f2870685f36682b0a27014fe89c50bc07e93c6ace4f45fad3828dc",
       "src/main/java/com/nttdocomo/ui/ogl/ShortBuffer.java": "9e8db4231f8bfb9d274e681cd37931265ea2d60f7d211ef3585158b315c91c7e",
+      "src/main/java/opendoja/audio/mld/MLDNativeADPCMDecoder.java": "002a57e7e6efe1619d9d1fa45eb3ddd957ac5c474fa8f9355b96127e0cf129dd",
       "src/main/java/opendoja/host/DesktopSurface.java": "cf94a487ba187dd3ef4b4ae176136f0e939b912efbb88806a72cef30c597a757",
       "src/main/java/opendoja/host/ogl/AcrodeaOglMatrixExtension.java": "6e5fff484ba4163496bb66bca07e3fe1e5dc233fca98ecc79a9da927cdfc31bf",
       "src/main/java/opendoja/host/ogl/AcrodeaOglRenderer.java": "47f67dea4ddcd76bc0d6832a07c0f5e24f51dbc190262d81a12cd60fff19c298",
