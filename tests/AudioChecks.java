@@ -9,6 +9,7 @@ import javax.microedition.media.decoders.MLDDecoder;
 import org.recompile.mobile.*;
 import p905i.web.ClockPlayer;
 import p905i.web.MldPcm;
+import p905i.web.MldSharp;
 import com.nttdocomo.ui.*;
 
 public class AudioChecks {
@@ -61,6 +62,53 @@ public class AudioChecks {
         ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(mld));
         require(timeOf(clock.getAudioEvents(),256,1)==0&&clock.getDuration()>0,"MLD resource trigger reaches the shared audio timeline");
     }
+    static byte[] sharpPacket(boolean metadata)throws Exception{
+        byte[] body=adat(16,4,1,false),payload=Arrays.copyOfRange(body,13,body.length);
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(bytes);
+        out.write(new byte[]{0x71,(byte)(metadata?0x84:0x83),0,0x4d,0});
+        if(metadata)out.writeInt(payload.length);out.write(payload);return bytes.toByteArray();
+    }
+    static byte[] sharpMld(byte[] packet)throws Exception{
+        ByteArrayOutputStream track=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(track);
+        out.write(new byte[]{0,(byte)0xff,(byte)0xc3,120}); // 48 ticks/quarter, 120 BPM
+        out.write(new byte[]{12,(byte)0xff,(byte)0xff});out.writeShort(packet.length);out.write(packet);
+        out.write(new byte[]{48,(byte)0xff,(byte)0xdf,0});
+        ByteArrayOutputStream body=new ByteArrayOutputStream();out=new DataOutputStream(body);
+        out.writeShort(3);out.write(new byte[]{1,1,1});out.writeBytes("trac");out.writeInt(track.size());out.write(track.toByteArray());
+        ByteArrayOutputStream file=new ByteArrayOutputStream();out=new DataOutputStream(file);
+        out.writeBytes("melo");out.writeInt(body.size());out.write(body.toByteArray());return file.toByteArray();
+    }
+    static void sharpChecks()throws Exception{
+        List<byte[]> samples=new ArrayList<byte[]>();List<Double> events=new ArrayList<Double>();
+        MldSharp sharp=new MldSharp(samples);byte[] packet=sharpPacket(true);
+        sharp.append(MldSharp.wrap(new byte[]{0x71,(byte)0x81,30}),0,events);
+        sharp.append(MldSharp.wrap(packet),.125,events);
+        byte[] body=adat(16,4,1,false);
+        require(samples.size()==1&&Arrays.equals(samples.get(0),MldPcm.decodeAdat(body,0,body.length)),
+                "SH Wave Packet Data3 uses the ADPCM decoder, not raw compressed bytes");
+        require(events.equals(Arrays.asList(.125,256.0,0.0,60.0)),"SH initial volume and packet trigger retained");
+        sharp.append(MldSharp.wrap(sharpPacket(false)),.25,events);
+        require(samples.size()==2&&events.subList(4,events.size()).equals(Arrays.asList(.25,256.0,0.0,0.0,.25,256.0,1.0,60.0)),
+                "SH Wave Packet Data replaces the previous wave on its channel");
+        packet[2]=(byte)0x40;sharp.append(MldSharp.wrap(packet),.5,events);
+        require(events.size()==16&&events.get(15)==126.0,"SH channels retain independent initial volume and voices");
+        for(int i=0;i<=9;i++){
+            List<byte[]> truncated=new ArrayList<byte[]>();new MldSharp(truncated).append(MldSharp.wrap(Arrays.copyOf(packet,i)),0,new ArrayList<Double>());
+            require(truncated.isEmpty(),"truncated SH packet emits no sample ("+i+")");
+        }
+        for(int type=0;type<5;type++){
+            byte[] bad=sharpPacket(true);
+            if(type==0)bad[3]=0x0d; // stored packet
+            if(type==1)bad[4]=1; // continued packet
+            if(type==2)bad[3]=0x55; // 32 kHz: outside current native decoder subset
+            if(type==3)bad[8]++; // size mismatch
+            if(type==4)bad[3]=0x4f; // unknown sample coding
+            List<byte[]> rejected=new ArrayList<byte[]>();new MldSharp(rejected).append(MldSharp.wrap(bad),0,new ArrayList<Double>());
+            require(rejected.isEmpty(),"unsupported SH packet is not synthesized as noise ("+type+")");
+        }
+        ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(sharpMld(sharpPacket(true))));
+        require(Math.abs(timeOf(clock.getAudioEvents(),256,0)-.125)<1e-6,"SH command survives MLD conversion and follows the tempo map");
+    }
     static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);System.out.println("PASS "+message);}
     static byte[] bytes(Sequence sequence)throws Exception{
         ByteArrayOutputStream out=new ByteArrayOutputStream();MidiSystem.write(sequence,1,out);return out.toByteArray();
@@ -84,6 +132,7 @@ public class AudioChecks {
         try {
             Mobile.isDoJa=true;Mobile.sound=false;Mobile.minLogLevel=Mobile.LOG_NONE;
             adpcmChecks();
+            sharpChecks();
             Sequence sequence=new Sequence(Sequence.PPQ,480);Track track=sequence.createTrack();
             midi(track,0,ShortMessage.PROGRAM_CHANGE,8,0);midi(track,0,ShortMessage.NOTE_ON,69,100);
             midi(track,480,ShortMessage.NOTE_OFF,69,0);

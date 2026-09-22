@@ -58,6 +58,18 @@ async function main() {
     await page.waitForTimeout(450);
     assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'ADPCM sample ends after rapid retriggering');
     console.log('PASS 2-bit MLD ADPCM waveform, repeated triggers and sample end');
+    const beforeSharp=await page.evaluate(()=>iapp.audioStats().pcm);
+    for(let i=1;i<=3;i++){
+      await page.keyboard.press('7');
+      await page.waitForFunction(count=>iapp.audioStats().pcm>=count&&iapp.audioStats().rms>.001,beforeSharp+i);
+      await page.waitForTimeout(100);
+    }
+    await page.keyboard.press('8');await page.waitForTimeout(100);
+    assert.ok((await page.evaluate(()=>iapp.audioStats())).rms<.0001,'SH pause stops the effect with BGM muted');
+    await page.keyboard.press('9');await page.waitForFunction(()=>iapp.audioStats().rms>.001);
+    await page.waitForTimeout(500);
+    assert.ok((await page.evaluate(()=>iapp.audioStats())).rms<.0001,'SH effect ends after restart');
+    console.log('PASS SH packet effect isolated from BGM, rapid triggers and pause/resume');
     await page.keyboard.press('4');
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     await page.keyboard.press('5');await page.waitForTimeout(300);
@@ -118,6 +130,11 @@ async function main() {
     await page.waitForFunction(()=>window.iapp.audioStats().pcm>=1&&window.iapp.audioStats().rms>0.001);
     assert.deepEqual((await page.evaluate(()=>window.iapp.audioStats())).errors,[]);
     console.log('PASS Java 17 2-bit ADPCM waveform');
+    await page.waitForTimeout(500);
+    const sharp17=await page.evaluate(()=>iapp.audioStats().pcm);
+    await page.keyboard.press('7');
+    await page.waitForFunction(count=>iapp.audioStats().pcm>count&&iapp.audioStats().rms>.001,sharp17);
+    console.log('PASS Java 17 SH packet waveform with BGM muted');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     assert.deepEqual(errors,[]);

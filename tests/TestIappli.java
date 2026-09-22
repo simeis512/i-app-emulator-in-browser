@@ -8,7 +8,7 @@ public class TestIappli extends IApplication {
     public void start() { Display.setCurrent(new TestCanvas()); }
     static class TestCanvas extends Canvas implements Runnable {
         int x=16, frames;
-        AudioPresenter music, effect, adpcm;
+        AudioPresenter music, effect, adpcm, sharp;
         TestCanvas() {
             try(DataInputStream in=Connector.openDataInputStream("scratchpad:///0")) {
                 x=in.readInt();if(x<8 || x>200)x=16;
@@ -21,6 +21,8 @@ public class TestIappli extends IApplication {
                 effect=AudioPresenter.getAudioPresenter(1);effect.setSound(pcm);
                 MediaSound packed=MediaManager.getSound("resource:///fixture.mld");packed.use();
                 adpcm=AudioPresenter.getAudioPresenter(2);adpcm.setSound(packed);
+                MediaSound packet=MediaManager.getSound("resource:///sharp.mld");packet.use();
+                sharp=AudioPresenter.getAudioPresenter(3);sharp.setSound(packet);
             }catch(Exception e){throw new RuntimeException(e);}
             save();new Thread(this).start();
         }
@@ -38,6 +40,9 @@ public class TestIappli extends IApplication {
             if(key==Display.KEY_4)music.setAttribute(AudioPresenter.SET_VOLUME,100);
             if(key==Display.KEY_5)music.pause();
             if(key==Display.KEY_6)music.restart();
+            if(key==Display.KEY_7)sharp.play();
+            if(key==Display.KEY_8)sharp.pause();
+            if(key==Display.KEY_9)sharp.restart();
             save();
         }
         public void paint(Graphics g) {

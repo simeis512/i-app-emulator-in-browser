@@ -29,4 +29,4 @@ def add_notices(archive):
     for path in sorted((ROOT/'licenses').glob('*.txt')):
         add_file(archive,path,'META-INF/licenses/'+path.name)
 
-MODIFIED='// Modified by i-app-emulator-in-browser on 2026-09-21; see build scripts and THIRD_PARTY.md.\n'
+MODIFIED='// Modified by i-app-emulator-in-browser on 2026-09-22; see build scripts and THIRD_PARTY.md.\n'

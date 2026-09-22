@@ -76,6 +76,15 @@ the native ADPCM path additionally uses the selected openDoJa decoder above.
 Decoded application audio stays in the user's browser. Web Audio is a browser API,
 not an additional bundled library.
 
+`MldSharp.java` is an original adapter for self-contained SH MFi ADPCM wave packets.
+Packet field layout and the SET playback mode were checked against
+[vavi-sound Function131](https://github.com/umjammer/vavi-sound/blob/a0487ed13066dbda5b6a20fe2c28292f8153b5da/src/main/java/vavi/sound/mfi/vavi/sharp/Function131.java)
+and [Function132](https://github.com/umjammer/vavi-sound/blob/a0487ed13066dbda5b6a20fe2c28292f8153b5da/src/main/java/vavi/sound/mfi/vavi/sharp/Function132.java).
+No source implementation, test recordings, payloads or synthesis tables from
+vavi-sound are included. The adapter feeds packet data from the user's application
+to the existing openDoJa ADPCM decoder above. This is a limited packet adapter,
+not the complete SH/FueTrek playback engine. Tests contain only authored codes.
+
 `web/instruments.mjs` reads the FTRM v1 format documented by the pinned openDoJa
 `FueTrekRom.java` and `FueTrekSampler.java`. It reads waveforms and parameters only
 from a file explicitly selected by the user; it embeds no extracted instrument
@@ -93,7 +102,7 @@ corresponding source, build scripts, vendored sources and license notices for
 that exact version. Link prominently to that source alongside the binaries.
 `package.py` creates a distribution including those sources.
 
-Generated modified Java files carry a modification notice dated 2026-09-21.
+Generated modified Java files carry a modification notice dated 2026-09-22.
 Vendored inputs remain byte-for-byte identical to the recorded snapshots.
 
 This project supplies no commercial applications, recovered saves, game images,

@@ -36,6 +36,7 @@ src/p905i/web/BrowserRuntime.java
 src/p905i/web/BrowserAudio.java
 src/p905i/web/ClockPlayer.java
 src/p905i/web/MldPcm.java
+src/p905i/web/MldSharp.java
 src-ogl/p905i/web/FogState.java
 tests/RuntimeChecks.java
 tests/AudioChecks.java

@@ -54,7 +54,7 @@ public final class ClockPlayer extends BasicPlayer {
             }else if(data.length>=12&&data[0]=='R'&&data[1]=='I'&&data[2]=='F'&&data[3]=='F'){
                 duration=waveDuration(data);samples.add(data);audioEvents=new double[]{0,256,0,127};
             }
-            if(sequence!=null)buildTimeline();
+            if(sequence!=null)buildTimeline(samples);
             if(duration==0&&!samples.isEmpty())for(byte[] sample:samples)if(sample!=null)duration=Math.max(duration,waveDuration(sample));
             BrowserAudio.load(audioId,audioEvents,duration);
             for(int i=0;i<samples.size();i++)if(samples.get(i)!=null)BrowserAudio.sample(audioId,i,samples.get(i));
@@ -83,11 +83,12 @@ public final class ClockPlayer extends BasicPlayer {
         if(byteRate==0||bytes<0)throw new IOException("Missing WAVE format/data");
         return bytes*1000000L/byteRate;
     }
-    private void buildTimeline(){
+    private void buildTimeline(List<byte[]> samples){
         List<MidiEvent> events=new ArrayList<MidiEvent>();
         for(Track track:sequence.getTracks())for(int i=0;i<track.size();i++)events.add(track.get(i));
         Collections.sort(events,new Comparator<MidiEvent>(){public int compare(MidiEvent a,MidiEvent b){return Long.compare(a.getTick(),b.getTick());}});
         List<Double> output=new ArrayList<Double>();long tick=0;double micros=0;int tempo=500000;
+        MldSharp sharp=new MldSharp(samples);
         float division=sequence.getDivisionType();
         for(MidiEvent event:events){
             double perTick=division==Sequence.PPQ?(double)tempo/sequence.getResolution():1000000.0/(division*sequence.getResolution());
@@ -97,7 +98,8 @@ public final class ClockPlayer extends BasicPlayer {
                 MetaMessage meta=(MetaMessage)message;byte[] data=meta.getData();
                 if(meta.getType()==0x51&&data.length==3&&division==Sequence.PPQ){
                     int value=((data[0]&255)<<16)|((data[1]&255)<<8)|(data[2]&255);if(value>0)tempo=value;
-                }else if(meta.getType()==0x7f&&data.length==2){status=256;a=data[0]&255;b=data[1]&255;}
+                }else if(meta.getType()==0x7f&&sharp.append(data,micros/1000000.0,output))continue;
+                else if(meta.getType()==0x7f&&data.length==2){status=256;a=data[0]&255;b=data[1]&255;}
                 else if(MLDDecoder.MLDSequenceMarker.isStopMarker(MLDDecoder.MLDSequenceMarker.decodeMarker(meta)))status=257;
             }else if(message instanceof ShortMessage){
                 ShortMessage m=(ShortMessage)message;status=m.getStatus();a=m.getData1();b=m.getData2();

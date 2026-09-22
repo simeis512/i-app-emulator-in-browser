@@ -35,6 +35,22 @@ def patched_sources():
                 pcmData.add(pcm == null ? null : new ByteArrayInputStream(pcm));
                 state.decodePos += length;
             }'''),
+            ('SystemEvent(int trackIndex, int rawTick, int command, int value, int part, int timebase)',
+             'byte[] machineData;\n            SystemEvent withMachineData(byte[] data) { machineData=data; return this; }\n            SystemEvent(int trackIndex, int rawTick, int command, int value, int part, int timebase)'),
+            ('offset += length;\n\t\t\t\t\t\tevents.add(new SystemEvent(trackIndex, rawTick, command, -1, -1, -1));',
+             '''byte[] machineData = command == 0xFF ? java.util.Arrays.copyOfRange(payload, offset, offset+length) : null;
+                        offset += length;
+                        events.add(new SystemEvent(trackIndex, rawTick, command, -1, -1, -1).withMachineData(machineData));'''),
+            ('event.timebase);', 'event.timebase).withMachineData(event.machineData);'),
+            ('maxTick = Math.max(maxTick, handleSystemEvent((SystemEvent) event, tempoPoints, warnings, renderState));',
+             '''SystemEvent systemEvent = (SystemEvent) event;
+                    byte[] packet = p905i.web.MldSharp.wrap(systemEvent.machineData);
+                    if (packet != null) {
+                        MetaMessage meta = new MetaMessage();
+                        meta.setMessage(0x7F, packet, packet.length);
+                        conductorTrack.add(new MidiEvent(meta, rawToMidiTick(tempoPoints, event.rawTick)));
+                    }
+                    maxTick = Math.max(maxTick, handleSystemEvent(systemEvent, tempoPoints, warnings, renderState));'''),
         ],
         'org/recompile/mobile/PlatformPlayer.java': [
             ('if(Mobile.sound == false) { player = new BasicPlayer(); disableControls = true; }',

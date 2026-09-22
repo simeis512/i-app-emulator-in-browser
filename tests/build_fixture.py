@@ -18,10 +18,17 @@ events=bytes([0,0x7f,0x80,0x3f,96,0xff,0xdf,0])
 body=struct.pack('>HBBB',11,1,1,1)+b'ainf'+struct.pack('>HBB',2,1,0)
 body+=b'adat'+struct.pack('>I',len(adat))+adat+b'trac'+struct.pack('>I',len(events))+events
 mld=b'melo'+struct.pack('>I',len(body))+body
+# Authored SH single-packet ADPCM effect; no extracted wave/packet is reused.
+codes=bytes((i*37+19)&255 for i in range(1600))
+packet=bytes([0x71,0x84,0,0x45,0])+struct.pack('>I',len(codes))+codes
+sharp_events=bytes([1,0xff,0xff])+struct.pack('>H',len(packet))+packet+bytes([96,0xff,0xdf,0])
+sharp_body=struct.pack('>HBBB',3,1,1,1)+b'trac'+struct.pack('>I',len(sharp_events))+sharp_events
+sharp_mld=b'melo'+struct.pack('>I',len(sharp_body))+sharp_body
 with zipfile.ZipFile(output/'fixture.jar','w',zipfile.ZIP_DEFLATED) as z:
     for p in sorted(classes.rglob('*.class')):z.write(p,p.relative_to(classes).as_posix())
     z.writestr('fixture.mid',midi);z.writestr('fixture.wav',pcm.getvalue())
     z.writestr('fixture.mld',mld)
+    z.writestr('sharp.mld',sharp_mld)
 (output/'fixture.jam').write_text('AppName=Original Test Fixture\nAppClass=TestIappli\nSPsize=16\n',encoding='ascii')
 (output/'fixture.sp').write_bytes((16).to_bytes(4,'big')+bytes(12))
 print('Built original fixture in',output)
