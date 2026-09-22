@@ -4,9 +4,12 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 import argparse, hashlib, io, json, time, zipfile
 
+# Bot protection in front of a published site rejects the default urllib agent.
+AGENT={'User-Agent':'i-app-emulator-in-browser verify_site.py'}
+
 def fetch(url,headers=None,limit=8*1024*1024):
     try:
-        with urlopen(Request(url,headers=headers or {}),timeout=60) as response:
+        with urlopen(Request(url,headers={**AGENT,**(headers or {})}),timeout=60) as response:
             return response.status,response.headers,response.read(limit)
     except HTTPError as error:
         with error: return error.status,error.headers,b''
@@ -27,7 +30,7 @@ def run(base,sums):
         # CheerpJ reads JARs in chunks, and a host that compresses them drops ranges.
         status,headers,body=fetch(base+name,{'Range':'bytes=0-255'})
         check(status==206 and len(body)==256,name+' answers a byte range with 206')
-        check(not headers.get('Content-Encoding'),name+' is served uncompressed')
+        check(status==206 and not headers.get('Content-Encoding'),name+' is served uncompressed')
         check(body[:2]==b'PK',name+' starts with a ZIP signature')
     status,headers,body=fetch(base+'source.zip',limit=64*1024*1024)
     check(status==200,'source.zip is downloadable')
