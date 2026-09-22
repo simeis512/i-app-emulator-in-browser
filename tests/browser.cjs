@@ -211,7 +211,17 @@ async function main() {
     assert.ok(await page.locator('#start').isVisible(),'leaving play mode shows the settings again');
     await page.locator('#leave-play').click();
     await page.waitForFunction(()=>document.body.classList.contains('playing'));
-    console.log('PASS play mode keeps screen and keypad visible and can be toggled');
+    // A phone turned sideways is wide but short, so width alone must not decide the layout.
+    await page.setViewportSize({width:844,height:390});
+    await page.waitForTimeout(300);
+    const turned=await page.evaluate(()=>({playing:document.body.classList.contains('playing'),
+      padBottom:document.querySelector('.keypad').getBoundingClientRect().bottom,
+      inner:innerHeight,scroll:document.documentElement.scrollHeight}));
+    assert.ok(turned.playing,'a sideways phone stays in play mode');
+    assert.ok(turned.padBottom<=turned.inner+1&&turned.scroll<=turned.inner+1,'sideways still needs no scrolling');
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>document.body.classList.contains('playing'));
+    console.log('PASS play mode keeps screen and keypad visible upright and sideways');
     assert.deepEqual(uploads,[]);assert.deepEqual(errors,[]);
     console.log('PASS persistent save reload, mobile layout and no local upload');
 

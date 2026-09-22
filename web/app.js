@@ -57,13 +57,14 @@ function chooseSize() {
 }
 // Play mode sizes the canvas from the free area, so the keypad stays on screen.
 function fitScreen(){canvas.style.setProperty('--aspect',canvas.width/canvas.height);}
-const narrow=()=>matchMedia('(max-width:750px)').matches;
+const PHONE='(max-width:750px),(max-height:560px)';
+const narrow=()=>matchMedia(PHONE).matches;
 function setPlaying(on) {
   document.body.classList.toggle('playing',on&&narrow());
   $('leave-play').textContent=on?'設定':'画面に戻る';$('leave-play').hidden=!booted||!narrow();
 }
 $('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
-matchMedia('(max-width:750px)').addEventListener('change',()=>setPlaying(booted));
+matchMedia(PHONE).addEventListener('change',()=>setPlaying(booted));
 chooseSize(); $('size').onchange=chooseSize;
 function selectFiles(incoming) {
   if(booted || preparing) return;
