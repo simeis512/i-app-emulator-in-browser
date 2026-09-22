@@ -42,3 +42,38 @@ jobs:
           name: emulator-with-source
           path: dist/i-app-emulator-in-browser.zip
           if-no-files-found: error
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Check whether publishing is configured
+        id: config
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else echo 'ready=false' >> "$GITHUB_OUTPUT"; echo 'No Cloudflare credentials; skipping publication.'; fi
+      - uses: actions/setup-python@v7
+        if: steps.config.outputs.ready == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        if: steps.config.outputs.ready == 'true'
+        with:
+          name: emulator-with-source
+      - name: Unpack the audited distribution
+        if: steps.config.outputs.ready == 'true'
+        run: unzip -q i-app-emulator-in-browser.zip -d publish
+      - name: Publish the distribution's web directory
+        if: steps.config.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 pages deploy publish/web --project-name=i-appli --branch=main --commit-dirty=true
+      - name: Verify the published site
+        if: steps.config.outputs.ready == 'true'
+        run: python publish/verify_site.py https://i-appli.simeis512.com --sums publish/SHA256SUMS.json --wait 180

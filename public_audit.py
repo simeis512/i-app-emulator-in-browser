@@ -28,6 +28,7 @@ package.py
 package.json
 package-lock.json
 serve.py
+verify_site.py
 Start-Emulator.cmd
 Start-Emulator.ps1
 Stop-Emulator.cmd
