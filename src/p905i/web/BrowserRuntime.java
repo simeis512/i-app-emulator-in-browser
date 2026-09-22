@@ -16,6 +16,8 @@ public final class BrowserRuntime {
     private static final ByteArrayOutputStream log = new ByteArrayOutputStream();
     private static final StringBuilder events = new StringBuilder();
     private static final java.util.Set<Integer> held = new java.util.HashSet<Integer>();
+    /** Browser-side code for CLEAR, outside every key range the upstream tables use. */
+    public static final int CLEAR = -8;
     private static native void present(int[] argb, int width, int height);
 
     public static synchronized void start(String jar, String jam, String sp, String saves,
@@ -117,11 +119,23 @@ public final class BrowserRuntime {
         if (events.length() > 60000) events.delete(0,30000);
         events.append(line).append('\n');
     }
+    /** The upstream key table cannot carry CLEAR: its DoJa constant collides with FIRE as a
+     * switch label, and 1 << KEY_CLEAR falls back onto the KEY_0 bit of the 32-bit keypad
+     * state. Deliver the event directly instead, leaving that state untouched. */
+    private static void clear(boolean down) {
+        com.nttdocomo.ui.Frame frame = com.nttdocomo.ui.Display.getCurrent();
+        if (!(frame instanceof com.nttdocomo.ui.Canvas)) return;
+        ((com.nttdocomo.ui.Canvas) frame).processEvent(down ? com.nttdocomo.ui.Display.KEY_PRESSED_EVENT
+                : com.nttdocomo.ui.Display.KEY_RELEASED_EVENT, com.nttdocomo.ui.Display.KEY_CLEAR);
+    }
     public static synchronized void key(int code, boolean down) {
         if (platform == null || MobilePlatform.appTerminated) return;
         try {
-            if (down && held.add(code)) platform.keyPressed(code);
-            else if (!down && held.remove(code)) platform.keyReleased(code);
+            if (down == held.contains(code)) return;
+            if (down) held.add(code); else held.remove(code);
+            if (code == CLEAR) clear(down);
+            else if (down) platform.keyPressed(code);
+            else platform.keyReleased(code);
         } catch (Throwable e) { failed(e); }
     }
     public static synchronized void releaseAll() {

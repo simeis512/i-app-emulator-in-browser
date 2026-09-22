@@ -3,6 +3,8 @@ import { addFiles, prepareApplication } from './loader.mjs';
 import { BrowserAudio } from './audio.mjs';
 import { readInstrumentFile } from './instruments.mjs';
 const $ = id => document.getElementById(id);
+// CLEAR has no place in the upstream key tables; the runtime delivers it separately.
+const CLEAR = -8;
 const canvas = $('screen'), ctx = canvas.getContext('2d', { alpha:false });
 let files = {}, runtime, application, booted = false, preparing = false;
 let frames = 0, imageData, polling = false, fpsFrames = 0, fpsTime = performance.now();
@@ -51,8 +53,17 @@ function status(text, error=false) { $('status').textContent=text; $('status').c
 function chooseSize() {
   [canvas.width,canvas.height]=$('size').value.split(',').map(Number);
   imageData=ctx.createImageData(canvas.width,canvas.height);
-  $('resolution').textContent=`${canvas.width} × ${canvas.height}`;
+  $('resolution').textContent=`${canvas.width} × ${canvas.height}`;fitScreen();
 }
+// Play mode sizes the canvas from the free area, so the keypad stays on screen.
+function fitScreen(){canvas.style.setProperty('--aspect',canvas.width/canvas.height);}
+const narrow=()=>matchMedia('(max-width:750px)').matches;
+function setPlaying(on) {
+  document.body.classList.toggle('playing',on&&narrow());
+  $('leave-play').textContent=on?'設定':'画面に戻る';$('leave-play').hidden=!booted||!narrow();
+}
+$('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
+matchMedia('(max-width:750px)').addEventListener('change',()=>setPlaying(booted));
 chooseSize(); $('size').onchange=chooseSize;
 function selectFiles(incoming) {
   if(booted || preparing) return;
@@ -114,6 +125,7 @@ async function start() {
       async Java_p905i_web_BrowserRuntime_present(lib,pixels,width,height) {
         if(width!==canvas.width || height!==canvas.height) {
           canvas.width=width;canvas.height=height;imageData=ctx.createImageData(width,height);
+          $('resolution').textContent=`${width} × ${height}`;fitScreen();
         }
         const rgba=imageData.data;
         for(let i=0,j=0;i<pixels.length;i++,j+=4) {
@@ -150,7 +162,7 @@ async function start() {
         fpsFrames=frames;fpsTime=now;
       }catch(error){status(String(error),true);}finally{polling=false;}
     },1000);
-    canvas.focus();
+    setPlaying(true);canvas.focus();
   }catch(error) {
     status(error.message||String(error),true);console.error(error);
     $('start').textContent=booted?'再読み込み':'起動する';$('start').disabled=false;
@@ -179,7 +191,8 @@ for(const button of document.querySelectorAll('[data-key]')) {
   button.onpointerup=button.onpointercancel=button.onlostpointercapture=e=>key('pointer:'+e.pointerId,code,false);
 }
 function keycode(e) {
-  const map={ArrowUp:-1,ArrowDown:-2,ArrowLeft:-3,ArrowRight:-4,Enter:-5,' ':-5,z:-6,Z:-6,x:-7,X:-7,'*':42,'#':35};
+  const map={ArrowUp:-1,ArrowDown:-2,ArrowLeft:-3,ArrowRight:-4,Enter:-5,' ':-5,z:-6,Z:-6,x:-7,X:-7,
+    Backspace:CLEAR,'*':42,'#':35};
   return /^[0-9]$/.test(e.key)?e.key.charCodeAt(0):map[e.key];
 }
 document.addEventListener('keydown',e=>{
@@ -187,8 +200,70 @@ document.addEventListener('keydown',e=>{
   const code=keycode(e);if(code!==undefined && runtime){e.preventDefault();key('keyboard:'+e.code,code,true);}
 });
 document.addEventListener('keyup',e=>key('keyboard:'+e.code,keycode(e),false));
-function release(){for(const [source,code] of [...sources])key(source,code,false);}
+function release(){for(const [source,code] of [...sources])key(source,code,false);padRelease();}
 window.addEventListener('blur',release);document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
+
+// Gamepads feed the same key() path as touch and keyboard, so a held key stays consistent.
+const PAD_DEFAULT={0:-5,1:CLEAR,2:-6,3:-7,4:42,5:35,8:49,9:51,12:-1,13:-2,14:-3,15:-4};
+const PAD_AXES={0:[-3,-4],1:[-1,-2]};
+const PAD_LEARN=[[-5,'決定'],[CLEAR,'クリア'],[-6,'左ソフト'],[-7,'右ソフト'],[-1,'↑'],[-2,'↓'],
+  [-3,'←'],[-4,'→'],[42,'＊'],[35,'＃'],[49,'1'],[51,'3']];
+let padMap={...PAD_DEFAULT},padHeld=new Map(),padLearn=-1,padPrev=new Set();
+try{const saved=localStorage.getItem('padMap');if(saved)padMap={...PAD_DEFAULT,...JSON.parse(saved)};}catch{}
+function padSave(){try{localStorage.setItem('padMap',JSON.stringify(padMap));}catch{}}
+function pads(){return [...(navigator.getGamepads?.()||[])].filter(Boolean);}
+function padPressed(){const set=new Set();for(const pad of pads())pad.buttons.forEach((b,i)=>{if(b.pressed)set.add(i);});return set;}
+function padStatus() {
+  const list=pads();
+  $('pad-status').textContent=list.length?
+    list.map(pad=>pad.id+(pad.mapping==='standard'?'':'（標準配置ではありません）')).join(' / '):
+    '接続されていません。ボタンを押すと認識します。';
+  $('pad-remap').disabled=$('pad-reset').disabled=!list.length;
+}
+function padWanted() {
+  const wanted=new Map();
+  for(const pad of pads()) {
+    pad.buttons.forEach((button,index)=>{
+      if(button.pressed&&padMap[index]!==undefined)wanted.set(`pad${pad.index}:b${index}`,padMap[index]);
+    });
+    for(const [axis,[low,high]] of Object.entries(PAD_AXES)) {
+      const value=pad.axes[axis]??0,source=`pad${pad.index}:a${axis}`;
+      if(value<=-.5)wanted.set(source,low);else if(value>=.5)wanted.set(source,high);
+    }
+  }
+  return wanted;
+}
+function padAsk(){$('pad-remap-status').hidden=false;$('pad-remap-status').textContent=`「${PAD_LEARN[padLearn][1]}」に割り当てるボタンを押してください。`;}
+function padStopLearn(message) {
+  padLearn=-1;$('pad-remap').textContent='割り当てを変更';
+  $('pad-remap-status').textContent=message;$('pad-remap-status').hidden=!message;
+}
+function padLearnStep() {
+  // Assign on a new press, so holding one button cannot fill several entries.
+  const pressed=padPressed(),fresh=[...pressed].find(index=>!padPrev.has(index));padPrev=pressed;
+  if(fresh===undefined)return;
+  const code=PAD_LEARN[padLearn][0];
+  for(const index of Object.keys(padMap))if(padMap[index]===code)delete padMap[index];
+  padMap[fresh]=code;padSave();padLearn++;
+  if(padLearn>=PAD_LEARN.length)padStopLearn('割り当てを保存しました。');else padAsk();
+}
+function padPoll() {
+  requestAnimationFrame(padPoll);
+  if(padLearn>=0){padLearnStep();return;}
+  const wanted=padWanted();
+  for(const [source,code] of padHeld)if(wanted.get(source)!==code)key(source,code,false);
+  for(const [source,code] of wanted)if(padHeld.get(source)!==code)key(source,code,true);
+  padHeld=wanted;
+}
+function padRelease(){for(const [source,code] of padHeld)key(source,code,false);padHeld=new Map();}
+$('pad-remap').onclick=()=>{
+  if(padLearn>=0){padStopLearn('変更を中止しました。押した分は保存されています。');return;}
+  padRelease();padLearn=0;padPrev=padPressed();$('pad-remap').textContent='中止';padAsk();
+};
+$('pad-reset').onclick=()=>{padMap={...PAD_DEFAULT};padSave();padStopLearn('標準の割り当てに戻しました。');};
+for(const type of ['gamepadconnected','gamepaddisconnected'])
+  window.addEventListener(type,()=>{padRelease();padStatus();});
+padStatus();requestAnimationFrame(padPoll);
 function download(blob,name) {
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);

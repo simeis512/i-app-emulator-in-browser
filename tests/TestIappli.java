@@ -32,7 +32,14 @@ public class TestIappli extends IApplication {
             try(DataOutputStream out=Connector.openDataOutputStream("scratchpad:///0;pos=0,length=4")){out.writeInt(x);}
             catch(Exception e){throw new RuntimeException(e);}
         }
+        int cleared; boolean clearDown;
         public void processEvent(int type,int key) {
+            // CLEAR bypasses the keypad state, so count a release only after its own press.
+            if(key==Display.KEY_CLEAR) {
+                if(type==Display.KEY_PRESSED_EVENT)clearDown=true;
+                else if(clearDown){clearDown=false;cleared++;}
+                repaint();return;
+            }
             if(type!=Display.KEY_PRESSED_EVENT)return;
             if(key==Display.KEY_RIGHT)x=Math.min(200,x+20);
             if(key==Display.KEY_LEFT)x=Math.max(8,x-20);
@@ -52,7 +59,9 @@ public class TestIappli extends IApplication {
             g.lock();g.setColor(Graphics.getColorOfRGB(17,34,51));g.fillRect(0,0,getWidth(),getHeight());
             g.setColor(Graphics.getColorOfRGB(120,210,255));g.fillRect(x,90,20,20);
             g.setColor(Graphics.getColorOfRGB(255,255,255));g.drawString("Original test fixture",12,30);
-            g.drawString("x="+x+" frame="+frames,12,52);g.unlock(true);
+            g.drawString("x="+x+" frame="+frames,12,52);
+            if(cleared>0){g.setColor(Graphics.getColorOfRGB(255,180,60));g.fillRect(200,10,20,20);}
+            g.unlock(true);
         }
         public void run() {try{while(true){frames++;repaint();Thread.sleep(100);}}catch(Exception e){throw new RuntimeException(e);}}
     }

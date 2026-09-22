@@ -3,3 +3,26 @@
 .audio-controls{border:1px solid #3d4c64;border-radius:8px;padding:12px;margin:10px 0 14px}.audio-controls input[type="range"]{width:100%}.audio-controls input[type="checkbox"]{accent-color:#a0d5f8}.audio-controls .note{margin:6px 0 0}
 .instrument-controls{margin-top:12px;padding-top:10px}.instrument-controls label{margin-top:12px}.instrument-controls input{max-width:100%;font:inherit;font-size:12px}.instrument-controls button{margin-top:10px;font-size:12px}.instrument-controls .note{overflow-wrap:anywhere}
 .dropzone{padding:14px;border:1px dashed #6c8aa9;border-radius:9px;background:#182332}.dropzone input{max-width:100%;font:inherit;font-size:12px}.file-list{padding-left:16px;color:#bdd6ed;font-size:12px;overflow-wrap:anywhere;line-height:1.8}#clear-files{font-size:12px;margin-bottom:20px}#app-name{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#export-save{margin:6px 0 0 6px}footer a{color:#a0d5f8}.controls>.note{margin:14px 0}label[for="renderer"]{margin-top:8px}@media(max-width:750px){.controls{display:block}.workspace{display:flex;flex-direction:column}.viewer{order:-1}canvas{width:100%;min-width:240px}}
+
+.pad-controls{margin-top:12px;padding-top:10px}.pad-controls button{margin:10px 6px 0 0;font-size:12px}.pad-controls .note{margin:6px 0 0}
+.stage{min-width:0}canvas{touch-action:none}
+/* Play mode keeps the screen and the keypad on one screenful, so a phone needs no scrolling. */
+#leave-play{position:fixed;top:8px;right:8px;z-index:9;font-size:12px;padding:7px 11px;opacity:.9}
+@media(max-width:750px){
+body.playing{overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
+body.playing main{padding:0;height:100dvh;display:flex;flex-direction:column}
+body.playing header,body.playing footer{display:none}
+body.playing .workspace{flex:1;min-height:0;gap:0}
+body.playing .viewer{flex:1;min-height:0;display:flex}
+body.playing .viewer>.note,body.playing .viewer>details{display:none}
+body.playing .device{flex:1;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
+body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:58px}
+body.playing .device-footer{display:none}
+body.playing .stage{flex:1;min-height:0;container-type:size;display:grid;place-items:center}
+body.playing canvas{width:min(100cqw,calc(100cqh*var(--aspect,1)));height:auto;max-height:100cqh}
+body.playing .controls{display:block;padding:0 6px 6px}
+body.playing .controls>*{display:none}
+body.playing .controls>.keypad{display:grid;margin:0;max-width:none;gap:4px}
+body.playing .keypad button{min-height:34px;padding:3px;font-size:12px;line-height:1.25}
+body.playing .keypad small{display:none}
+}

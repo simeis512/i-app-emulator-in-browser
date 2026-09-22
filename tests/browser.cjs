@@ -139,6 +139,18 @@ async function main() {
     assert.equal(bytes.length,16);assert.equal(bytes.readInt32BE(0),36);
     await page.screenshot({path:path.join(output,'fixture-desktop.png'),fullPage:true});
     console.log('PASS keyboard, canvas pixels and raw SP download');
+    // CLEAR travels outside the upstream key tables, so check it reaches the application.
+    assert.deepEqual(await pixel(210,20),[17,34,51,255]);
+    await page.locator('.keypad button[data-key="-8"]').click();
+    await page.waitForFunction(()=>document.querySelector('#screen').getContext('2d').getImageData(210,20,1,1).data[1]===180);
+    assert.deepEqual(await pixel(210,20),[255,180,60,255]);
+    assert.equal((await save()).readInt32BE(0),36,'clear key leaves the scratchpad alone');
+    const address=page.url();
+    await page.locator('#screen').focus();await page.keyboard.press('Backspace');
+    await page.waitForTimeout(150);
+    assert.equal(page.url(),address,'Backspace must not navigate away');
+    assert.deepEqual(errors,[]);
+    console.log('PASS clear key from the keypad and Backspace, as a press and release pair');
 
     console.log('Browser: reload and restore browser save over original SP');
     await page.route('**/__iapp/status',route=>route.fulfill({status:404,body:'Static host'}));
@@ -149,8 +161,26 @@ async function main() {
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>document.body.classList.contains('playing'));
     await page.screenshot({path:path.join(output,'fixture-mobile.png'),fullPage:true});
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    // A phone has to reach the keypad without scrolling the screen out of view.
+    const layout=await page.evaluate(()=>{
+      const screen=document.querySelector('#screen').getBoundingClientRect();
+      const pad=document.querySelector('.keypad').getBoundingClientRect();
+      return {top:screen.top,width:screen.width,height:screen.height,padTop:pad.top,padBottom:pad.bottom,
+        inner:innerHeight,scroll:document.documentElement.scrollHeight};
+    });
+    assert.ok(layout.top>=0&&layout.padBottom<=layout.inner+1,'screen and keypad share one screenful');
+    assert.ok(layout.padTop>=layout.top+layout.height-1,'the keypad sits below the screen');
+    assert.ok(layout.width>=240,'the screen is scaled up to the available width');
+    assert.ok(layout.scroll<=layout.inner+1,'play mode does not scroll the page');
+    await page.locator('#leave-play').click();
+    await page.waitForFunction(()=>!document.body.classList.contains('playing'));
+    assert.ok(await page.locator('#start').isVisible(),'leaving play mode shows the settings again');
+    await page.locator('#leave-play').click();
+    await page.waitForFunction(()=>document.body.classList.contains('playing'));
+    console.log('PASS play mode keeps screen and keypad visible and can be toggled');
     assert.deepEqual(uploads,[]);assert.deepEqual(errors,[]);
     console.log('PASS persistent save reload, mobile layout and no local upload');
 
