@@ -8,15 +8,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Audit source and build source-complete distribution
@@ -37,7 +37,7 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           python -c "import urllib.request,time; time.sleep(1); urllib.request.urlopen('http://127.0.0.1:9052/__iapp/status').read()"
           npm run test:audio
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: emulator-with-source
           path: dist/i-app-emulator-in-browser.zip
