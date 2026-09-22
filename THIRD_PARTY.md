@@ -14,7 +14,8 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
 - Changes: browser frontend bridge, scratchpad offsets/boundaries and repeated
   close handling, PhoneSystem attribute validation, image clipping, log capture,
   music clock, browser volume/tempo routing, DoJa synchronization callbacks and
-  ADAT resource decoding that retains indices for unsupported samples.
+  ADAT resource decoding that retains indices for unsupported samples, and
+  resampled WAVE payload sizes rounded to complete PCM frames.
 
 Separately licensed components retained from that snapshot:
 
@@ -84,6 +85,14 @@ No source implementation, test recordings, payloads or synthesis tables from
 vavi-sound are included. The adapter feeds packet data from the user's application
 to the existing openDoJa ADPCM decoder above. This is a limited packet adapter,
 not the complete SH/FueTrek playback engine. Tests contain only authored codes.
+
+`MldNec.java` is an original adapter for NEC MFi mono stream waves. Packet fields
+were checked against vavi-sound
+[Function1_240_7](https://github.com/umjammer/vavi-sound/blob/a0487ed13066dbda5b6a20fe2c28292f8153b5da/src/main/java/vavi/sound/mfi/vavi/nec/Function1_240_7.java)
+and [Function1_241_3](https://github.com/umjammer/vavi-sound/blob/a0487ed13066dbda5b6a20fe2c28292f8153b5da/src/main/java/vavi/sound/mfi/vavi/nec/Function1_241_3.java).
+No vavi-sound implementation or audio assets are included. It uses the existing
+FreeJ2ME-Plus Yamaha ADPCM decoder for approximate playback of application-owned
+waves. This does not add MA-3 FM synthesis, instrument tables or a sound bank.
 
 `web/instruments.mjs` reads the FTRM v1 format documented by the pinned openDoJa
 `FueTrekRom.java` and `FueTrekSampler.java`. It reads waveforms and parameters only

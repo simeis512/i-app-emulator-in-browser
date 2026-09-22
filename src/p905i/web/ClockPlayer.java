@@ -89,6 +89,7 @@ public final class ClockPlayer extends BasicPlayer {
         Collections.sort(events,new Comparator<MidiEvent>(){public int compare(MidiEvent a,MidiEvent b){return Long.compare(a.getTick(),b.getTick());}});
         List<Double> output=new ArrayList<Double>();long tick=0;double micros=0;int tempo=500000;
         MldSharp sharp=new MldSharp(samples);
+        MldNec nec=new MldNec(samples);
         float division=sequence.getDivisionType();
         for(MidiEvent event:events){
             double perTick=division==Sequence.PPQ?(double)tempo/sequence.getResolution():1000000.0/(division*sequence.getResolution());
@@ -99,6 +100,7 @@ public final class ClockPlayer extends BasicPlayer {
                 if(meta.getType()==0x51&&data.length==3&&division==Sequence.PPQ){
                     int value=((data[0]&255)<<16)|((data[1]&255)<<8)|(data[2]&255);if(value>0)tempo=value;
                 }else if(meta.getType()==0x7f&&sharp.append(data,micros/1000000.0,output))continue;
+                else if(meta.getType()==0x7f&&nec.append(data,micros/1000000.0,output))continue;
                 else if(meta.getType()==0x7f&&data.length==2){status=256;a=data[0]&255;b=data[1]&255;}
                 else if(MLDDecoder.MLDSequenceMarker.isStopMarker(MLDDecoder.MLDSequenceMarker.decodeMarker(meta)))status=257;
             }else if(message instanceof ShortMessage){

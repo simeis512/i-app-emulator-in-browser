@@ -2,7 +2,8 @@
 from pathlib import Path
 import subprocess, zipfile
 from dependencies import verify
-from build_support import clean_classes, add_file, add_notices, MODIFIED
+from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, MODIFIED
+from build_state import RECORD, record
 
 ROOT = Path(__file__).resolve().parent
 VENDOR = ROOT / 'vendor/freej2me-plus-devel'
@@ -26,6 +27,11 @@ def patched_sources():
     dst.write_text(MODIFIED+text, encoding='utf-8')
     patches = {rel: dst}
     for rel, replacements in {
+        'javax/microedition/media/decoders/WAVTools.java': [
+            ('final int newLength = (int) (inputLength * ((double) newSampleRate / originalSampleRate));',
+             '''int frameBytes = numChannels * (numBits / 8);
+        final int newLength = ((int) (inputLength * ((double) newSampleRate / originalSampleRate)) / frameBytes) * frameBytes;'''),
+        ],
         'javax/microedition/media/decoders/MLDDecoder.java': [
             ('if (chunkID.equals("adat"))      { decodeADATChunk(state); }',
              '''if (chunkID.equals("adat")) {
@@ -45,6 +51,7 @@ def patched_sources():
             ('maxTick = Math.max(maxTick, handleSystemEvent((SystemEvent) event, tempoPoints, warnings, renderState));',
              '''SystemEvent systemEvent = (SystemEvent) event;
                     byte[] packet = p905i.web.MldSharp.wrap(systemEvent.machineData);
+                    if (packet == null) packet = p905i.web.MldNec.wrap(systemEvent.machineData);
                     if (packet != null) {
                         MetaMessage meta = new MetaMessage();
                         meta.setMessage(0x7F, packet, packet.length);
@@ -100,6 +107,7 @@ def patched_sources():
     return patches
 
 def build():
+    compiler=find_javac()
     verify('freej2me-plus')
     verify('opendoja')
     BUILD.mkdir(exist_ok=True); WEB.mkdir(exist_ok=True)
@@ -113,7 +121,7 @@ def build():
     sources.sort(key=lambda p:p.as_posix())
     argfile = BUILD/'sources.txt'
     argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources), encoding='utf-8')
-    subprocess.run(['javac','-J-Duser.language=en','--release','8','-encoding','UTF-8','-d',str(classes),'@'+str(argfile)],check=True)
+    subprocess.run([compiler,'-J-Duser.language=en','--release','8','-encoding','UTF-8','-d',str(classes),'@'+str(argfile)],check=True)
     jar = WEB/'p905i-runtime.jar'
     with zipfile.ZipFile(jar, 'w', zipfile.ZIP_DEFLATED) as z:
         for base in [classes, VENDOR/'resources']:
@@ -121,6 +129,7 @@ def build():
                 if p.is_file(): add_file(z,p,p.relative_to(base).as_posix())
         add_file(z,VENDOR/'LICENSE','META-INF/LICENSE-FreeJ2ME.txt')
         add_notices(z)
+        add_bytes(z,record(ROOT,'runtime'),RECORD)
     print('Built',jar,jar.stat().st_size)
 
 if __name__ == '__main__':

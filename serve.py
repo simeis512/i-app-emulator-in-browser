@@ -2,13 +2,14 @@
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse, re, shutil, json, secrets, threading
+from build_state import all_status
 ROOT = Path(__file__).resolve().parent/'web'
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self,*args,**kwargs): super().__init__(*args,directory=str(ROOT),**kwargs)
     def do_GET(self):
         if self.path == '/__iapp/status':
-            data=json.dumps({'app':'i-app-emulator-in-browser','version':1}).encode('ascii')
+            data=json.dumps({'app':'i-app-emulator-in-browser','version':1,'builds':all_status(ROOT.parent)}).encode('ascii')
             self.send_response(200);self.send_header('Content-Type','application/json')
             self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
             return
@@ -57,6 +58,10 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=9052)
     args=parser.parse_args()
+    for component,info in all_status(ROOT.parent).items():
+        print(component+' build: '+info['state']+' '+info.get('id',''),flush=True)
+        if info['state']!='current':
+            print('Rebuild before using this component: python build.py, then python build_ogl.py',flush=True)
     print(f'i-appli emulator: http://127.0.0.1:{args.port}/ (Ctrl+C to stop)',flush=True)
     with ThreadingHTTPServer(('127.0.0.1',args.port),Handler) as server:
         server.shutdown_token=secrets.token_hex(32)

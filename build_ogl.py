@@ -6,7 +6,8 @@ BufferedImage as FreeJ2ME's 2D graphics. Original upstream sources stay intact.
 from pathlib import Path
 import re, subprocess, zipfile
 from dependencies import verify
-from build_support import clean_classes, add_file, add_notices, MODIFIED
+from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, MODIFIED
+from build_state import RECORD, record, status
 ROOT=Path(__file__).resolve().parent
 UP=ROOT/'vendor/openDoJa-master/src/main/java'
 OUT=ROOT/'build/ogl-src'
@@ -17,6 +18,9 @@ def write(rel,text):
     dst.write_text(MODIFIED+text,encoding='utf-8');return dst
 
 def build():
+    compiler=find_javac()
+    if status(ROOT,'runtime')['state']!='current':
+        raise SystemExit('Build the current core runtime first: python build.py')
     verify('opendoja')
     sources=[]
     for p in (UP/'com/nttdocomo/ui/ogl').rglob('*.java'):
@@ -128,12 +132,13 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
     clean_classes(CLASSES)
     argfile=ROOT/'build/ogl-sources.txt'
     argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources),encoding='utf-8')
-    subprocess.run(['javac','-J-Duser.language=en','--release','17','-encoding','UTF-8','-cp',str(ROOT/'web/p905i-runtime.jar'),'-d',str(CLASSES),'@'+str(argfile)],check=True)
+    subprocess.run([compiler,'-J-Duser.language=en','--release','17','-encoding','UTF-8','-cp',str(ROOT/'web/p905i-runtime.jar'),'-d',str(CLASSES),'@'+str(argfile)],check=True)
     jar=ROOT/'web/p905i-ogl.jar'
     with zipfile.ZipFile(jar,'w',zipfile.ZIP_DEFLATED) as z:
         for p in sorted(CLASSES.rglob('*.class'),key=lambda p:p.as_posix()):add_file(z,p,p.relative_to(CLASSES).as_posix())
         add_file(z,ROOT/'vendor/openDoJa-master/LICENSE','META-INF/LICENSE-openDoJa.txt')
         add_notices(z)
+        add_bytes(z,record(ROOT,'ogl'),RECORD)
     print('Built optional software OpenGL adapter:',jar,jar.stat().st_size)
 
 if __name__=='__main__':build()

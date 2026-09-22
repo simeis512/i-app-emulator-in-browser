@@ -9,6 +9,7 @@ public class TestIappli extends IApplication {
     static class TestCanvas extends Canvas implements Runnable {
         int x=16, frames;
         AudioPresenter music, effect, adpcm, sharp;
+        MediaSound packed, nec;
         TestCanvas() {
             try(DataInputStream in=Connector.openDataInputStream("scratchpad:///0")) {
                 x=in.readInt();if(x<8 || x>200)x=16;
@@ -19,7 +20,8 @@ public class TestIappli extends IApplication {
                 music.setAttribute(AudioPresenter.LOOP_COUNT,-1);music.play();
                 MediaSound pcm=MediaManager.getSound("resource:///fixture.wav");pcm.use();
                 effect=AudioPresenter.getAudioPresenter(1);effect.setSound(pcm);
-                MediaSound packed=MediaManager.getSound("resource:///fixture.mld");packed.use();
+                packed=MediaManager.getSound("resource:///fixture.mld");packed.use();
+                nec=MediaManager.getSound("resource:///nec.mld");nec.use();
                 adpcm=AudioPresenter.getAudioPresenter(2);adpcm.setSound(packed);
                 MediaSound packet=MediaManager.getSound("resource:///sharp.mld");packet.use();
                 sharp=AudioPresenter.getAudioPresenter(3);sharp.setSound(packet);
@@ -35,7 +37,8 @@ public class TestIappli extends IApplication {
             if(key==Display.KEY_RIGHT)x=Math.min(200,x+20);
             if(key==Display.KEY_LEFT)x=Math.max(8,x-20);
             if(key==Display.KEY_1)effect.play();
-            if(key==Display.KEY_2){adpcm.stop();adpcm.play();}
+            if(key==Display.KEY_2){adpcm.stop();adpcm.setSound(packed);adpcm.play();}
+            if(key==Display.KEY_0){adpcm.stop();adpcm.setSound(nec);adpcm.play();}
             if(key==Display.KEY_3)music.setAttribute(AudioPresenter.SET_VOLUME,0);
             if(key==Display.KEY_4)music.setAttribute(AudioPresenter.SET_VOLUME,100);
             if(key==Display.KEY_5)music.pause();

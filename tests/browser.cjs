@@ -38,6 +38,15 @@ async function main() {
       return page.evaluate(([x,y])=>Array.from(document.querySelector('#screen').getContext('2d').getImageData(x,y,1,1).data),[x,y]);
     }
     console.log('Browser: boot original 2D fixture');
+    // A successful git pull must not make an old JAR look current.
+    await page.route('**/__iapp/status',route=>route.fulfill({json:{app:'i-app-emulator-in-browser',builds:{runtime:{state:'stale'}}}}));
+    await page.goto(baseURL);
+    await page.locator('#files').setInputFiles(['jar','jam','sp'].map(ext=>path.join(root,'build/fixture/fixture.'+ext)));
+    await page.locator('#start').click();
+    await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('実行ファイルが古い'));
+    assert.equal(await page.evaluate(()=>Boolean(window.iapp)),false,'old JAR must not start');
+    await page.unroute('**/__iapp/status');
+    console.log('PASS stale local build blocked with rebuild instructions');
     await boot();
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     const initialAudio=await page.evaluate(()=>window.iapp.audioStats());
@@ -46,8 +55,19 @@ async function main() {
     await page.keyboard.press('3');
     await page.waitForTimeout(250);
     assert.ok((await page.evaluate(()=>window.iapp.audioStats())).rms<0.0001,'application volume zero');
+    await page.locator('#pcm-volume').fill('0');
+    assert.equal(await page.locator('#pcm-volume-value').textContent(),'0%');
+    await page.locator('#screen').focus();await page.keyboard.press('1');
+    await page.waitForFunction(()=>iapp.audioStats().pcm>=1);await page.waitForTimeout(80);
+    assert.ok((await page.evaluate(()=>iapp.audioStats())).rms<.0001,'PCM slider mutes the effect');
+    await page.waitForTimeout(300);
+    const mutedPcm=await page.evaluate(()=>iapp.audioStats().pcm);
+    await page.locator('#pcm-volume').fill('25');
+    assert.equal(await page.locator('#pcm-volume-value').textContent(),'25%');
+    await page.locator('#screen').focus();
     await page.keyboard.press('1');
-    await page.waitForFunction(()=>window.iapp.audioStats().pcm>=1&&window.iapp.audioStats().rms>0.001);
+    await page.waitForFunction(count=>iapp.audioStats().pcm>count&&iapp.audioStats().rms>.001,mutedPcm);
+    console.log('PASS PCM UI slider mutes and restores real Java-triggered effects');
     await page.waitForTimeout(300);
     const beforeAdpcm=await page.evaluate(()=>window.iapp.audioStats().pcm);
     for(let i=1;i<=3;i++){
@@ -70,6 +90,15 @@ async function main() {
     await page.waitForTimeout(500);
     assert.ok((await page.evaluate(()=>iapp.audioStats())).rms<.0001,'SH effect ends after restart');
     console.log('PASS SH packet effect isolated from BGM, rapid triggers and pause/resume');
+    const beforeNec=await page.evaluate(()=>iapp.audioStats().pcm);
+    for(let i=1;i<=3;i++){
+      await page.keyboard.press('0');
+      await page.waitForFunction(count=>iapp.audioStats().pcm>=count&&iapp.audioStats().rms>.001,beforeNec+i);
+      await page.waitForTimeout(100);
+    }
+    await page.waitForTimeout(600);
+    assert.ok((await page.evaluate(()=>iapp.audioStats())).rms<.0001,'NEC stream ends after retrigger');
+    console.log('PASS NEC stream waveform isolated from BGM, retrigger and sample end');
     await page.keyboard.press('4');
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     await page.keyboard.press('5');await page.waitForTimeout(300);
@@ -112,7 +141,10 @@ async function main() {
     console.log('PASS keyboard, canvas pixels and raw SP download');
 
     console.log('Browser: reload and restore browser save over original SP');
+    await page.route('**/__iapp/status',route=>route.fulfill({status:404,body:'Static host'}));
     await boot();
+    await page.unroute('**/__iapp/status');
+    console.log('PASS static host without a build-status endpoint still starts');
     assert.equal((await page.evaluate(()=>iapp.audioStats())).instrument,'procedural');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
@@ -135,6 +167,11 @@ async function main() {
     await page.keyboard.press('7');
     await page.waitForFunction(count=>iapp.audioStats().pcm>count&&iapp.audioStats().rms>.001,sharp17);
     console.log('PASS Java 17 SH packet waveform with BGM muted');
+    await page.waitForTimeout(500);
+    const nec17=await page.evaluate(()=>iapp.audioStats().pcm);
+    await page.keyboard.press('0');
+    await page.waitForFunction(count=>iapp.audioStats().pcm>count&&iapp.audioStats().rms>.001,nec17);
+    console.log('PASS Java 17 NEC stream waveform with BGM muted');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     assert.deepEqual(errors,[]);

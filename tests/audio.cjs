@@ -68,6 +68,20 @@ const {pathToFileURL}=require('node:url');
       for(let i=0;i<4410;i++)view.setInt16(44+2*i,Math.round(20000*Math.sin(2*Math.PI*660*i/44100)),true);
       result=await render([.1,256,0,100],{before:audio=>audio.sample(1,0,wave)});
       cases.push({name:'PCM sample has its expected frequency and ends',ok:result.stats.pcm===1&&Math.abs(frequency(result.data,.12,.19)-660)<20&&rms(result.data,.4,.8)<1e-5});
+      const pcmEvents=[.1,256,0,20]; // Stay below the master limiter's knee.
+      const pcm=audio=>audio.sample(1,0,wave);
+      const fullPcm=await render(pcmEvents,{before:audio=>{pcm(audio);audio.setPcmLevel(1);}});
+      const defaultPcm=await render(pcmEvents,{before:pcm});
+      const ratio=rms(defaultPcm.data,.13,.19)/rms(fullPcm.data,.13,.19);
+      cases.push({name:'default PCM balance is one quarter of the original level',ok:Math.abs(ratio-.25)<.002});
+      result=await render(pcmEvents,{before:audio=>{pcm(audio);audio.setPcmLevel(1);},after:audio=>audio.setPcmLevel(.25)});
+      cases.push({name:'PCM balance also affects already queued voices',ok:Math.abs(rms(result.data,.13,.19)/rms(fullPcm.data,.13,.19)-.25)<.002});
+      result=await render(pcmEvents,{before:pcm,after:audio=>audio.setPcmLevel(0)});
+      cases.push({name:'PCM-only mute silences PCM',ok:rms(result.data,.13,.19)<1e-5});
+      result=await render([0,0xc0,8,0,0,0x90,69,100,.6,0x80,69,0],{before:audio=>audio.setPcmLevel(0)});
+      cases.push({name:'PCM-only mute leaves synthesized music audible',ok:rms(result.data,.1,.4)>.001&&Math.abs(frequency(result.data,.1,.4)-440)<8});
+      result=await render(pcmEvents,{before:pcm,after:audio=>audio.control(1,3,0,1,0)});
+      cases.push({name:'application volume still controls PCM after balance adjustment',ok:rms(result.data,.13,.19)<1e-5});
       let rejected=false;try{decodeWave(new OfflineAudioContext(1,100,44100),wave.subarray(0,50));}catch{rejected=true;}
       cases.push({name:'truncated PCM rejected',ok:rejected});
       const external=audio=>audio.setInstrumentBank(bank);

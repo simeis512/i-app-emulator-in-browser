@@ -17,6 +17,7 @@ UPSTREAM.json
 build.py
 build_ogl.py
 build_support.py
+build_state.py
 check.py
 dependencies.py
 notices.py
@@ -37,6 +38,7 @@ src/p905i/web/BrowserAudio.java
 src/p905i/web/ClockPlayer.java
 src/p905i/web/MldPcm.java
 src/p905i/web/MldSharp.java
+src/p905i/web/MldNec.java
 src-ogl/p905i/web/FogState.java
 tests/RuntimeChecks.java
 tests/AudioChecks.java
@@ -49,6 +51,7 @@ tests/loader.test.mjs
 tests/instruments.test.mjs
 tests/instrument-fixture.mjs
 tests/test_server.py
+tests/test_build.py
 web/index.html
 web/app.js
 web/loader.mjs

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Real HTTP tests with temporary synthetic data; no installed games required."""
-import http.client, importlib.util, json, tempfile, threading, unittest
+import http.client, importlib.util, json, sys, tempfile, threading, unittest
 from pathlib import Path
 from http.server import ThreadingHTTPServer
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 spec=importlib.util.spec_from_file_location('emulator_server',Path(__file__).resolve().parents[1]/'serve.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -34,6 +35,7 @@ class ServerChecks(unittest.TestCase):
     def test_identity_and_full_file(self):
         status,headers,body=self.request('/__iapp/status')
         self.assertEqual(status,200);self.assertEqual(json.loads(body)['app'],'i-app-emulator-in-browser')
+        self.assertEqual(json.loads(body)['builds']['runtime']['state'],'missing')
         status,headers,body=self.request();self.assertEqual(body,bytes(range(256)))
         self.assertEqual(headers['Accept-Ranges'],'bytes')
 

@@ -24,11 +24,18 @@ packet=bytes([0x71,0x84,0,0x45,0])+struct.pack('>I',len(codes))+codes
 sharp_events=bytes([1,0xff,0xff])+struct.pack('>H',len(packet))+packet+bytes([96,0xff,0xdf,0])
 sharp_body=struct.pack('>HBBB',3,1,1,1)+b'trac'+struct.pack('>I',len(sharp_events))+sharp_events
 sharp_mld=b'melo'+struct.pack('>I',len(sharp_body))+sharp_body
+# Authored NEC mono Yamaha stream, registered separately from StreamOn.
+nec_packet=bytes([0x11,1,0xf0,7,0,1])+struct.pack('>H',8000)+codes[:-1]
+nec_on=bytes([0x11,1,0xf1,3,0,100])
+nec_events=b''.join(bytes([1,0xff,0xff])+struct.pack('>H',len(p))+p for p in [nec_packet,nec_on])+bytes([96,0xff,0xdf,0])
+nec_body=struct.pack('>HBBB',3,1,1,1)+b'trac'+struct.pack('>I',len(nec_events))+nec_events
+nec_mld=b'melo'+struct.pack('>I',len(nec_body))+nec_body
 with zipfile.ZipFile(output/'fixture.jar','w',zipfile.ZIP_DEFLATED) as z:
     for p in sorted(classes.rglob('*.class')):z.write(p,p.relative_to(classes).as_posix())
     z.writestr('fixture.mid',midi);z.writestr('fixture.wav',pcm.getvalue())
     z.writestr('fixture.mld',mld)
     z.writestr('sharp.mld',sharp_mld)
+    z.writestr('nec.mld',nec_mld)
 (output/'fixture.jam').write_text('AppName=Original Test Fixture\nAppClass=TestIappli\nSPsize=16\n',encoding='ascii')
 (output/'fixture.sp').write_bytes((16).to_bytes(4,'big')+bytes(12))
 print('Built original fixture in',output)

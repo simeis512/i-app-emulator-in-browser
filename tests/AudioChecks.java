@@ -10,6 +10,7 @@ import org.recompile.mobile.*;
 import p905i.web.ClockPlayer;
 import p905i.web.MldPcm;
 import p905i.web.MldSharp;
+import p905i.web.MldNec;
 import com.nttdocomo.ui.*;
 
 public class AudioChecks {
@@ -68,10 +69,10 @@ public class AudioChecks {
         out.write(new byte[]{0x71,(byte)(metadata?0x84:0x83),0,0x4d,0});
         if(metadata)out.writeInt(payload.length);out.write(payload);return bytes.toByteArray();
     }
-    static byte[] sharpMld(byte[] packet)throws Exception{
+    static byte[] sharpMld(byte[]... packets)throws Exception{
         ByteArrayOutputStream track=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(track);
         out.write(new byte[]{0,(byte)0xff,(byte)0xc3,120}); // 48 ticks/quarter, 120 BPM
-        out.write(new byte[]{12,(byte)0xff,(byte)0xff});out.writeShort(packet.length);out.write(packet);
+        for(byte[] packet:packets){out.write(new byte[]{12,(byte)0xff,(byte)0xff});out.writeShort(packet.length);out.write(packet);}
         out.write(new byte[]{48,(byte)0xff,(byte)0xdf,0});
         ByteArrayOutputStream body=new ByteArrayOutputStream();out=new DataOutputStream(body);
         out.writeShort(3);out.write(new byte[]{1,1,1});out.writeBytes("trac");out.writeInt(track.size());out.write(track.toByteArray());
@@ -110,6 +111,50 @@ public class AudioChecks {
         require(Math.abs(timeOf(clock.getAudioEvents(),256,0)-.125)<1e-6,"SH command survives MLD conversion and follows the tempo map");
     }
     static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);System.out.println("PASS "+message);}
+    static void necChecks()throws Exception{
+        byte[] body=adat(8,4,1,false);body[2]=(byte)0x82;
+        byte[] packet=new byte[8+body.length-13];
+        System.arraycopy(new byte[]{0x11,1,(byte)0xf0,7,0,1,0x1f,0x40},0,packet,0,8);
+        System.arraycopy(body,13,packet,8,body.length-13);
+        byte[] on={0x11,1,(byte)0xf1,3,0,100};
+        List<byte[]> samples=new ArrayList<byte[]>();List<Double> events=new ArrayList<Double>();
+        MldNec nec=new MldNec(samples);nec.append(MldNec.wrap(packet),0,events);
+        require(samples.size()==1&&events.isEmpty()&&Arrays.equals(samples.get(0),MldPcm.decodeAdat(body,0,body.length)),
+                "NEC registration decodes Yamaha ADPCM but does not start playback");
+        nec.append(MldNec.wrap(on),.25,events);
+        require(events.equals(Arrays.asList(.25,256.0,0.0,100.0)),"NEC StreamOn retains time, stream index and velocity");
+        nec.append(MldNec.wrap(on),.5,events);
+        require(events.subList(4,12).equals(Arrays.asList(.5,256.0,0.0,0.0,.5,256.0,0.0,100.0)),"NEC retrigger stops the previous voice");
+        byte[] second=packet.clone();second[4]=1;nec.append(MldNec.wrap(second),.6,events);
+        byte[] other=on.clone();other[3]=0x43;other[4]=1;nec.append(MldNec.wrap(other),.7,events);
+        require(events.size()==16&&events.get(14)==1.0,"NEC channels can trigger independent streams");
+        for(int size=0;size<=8;size++){
+            List<byte[]> rejected=new ArrayList<byte[]>();new MldNec(rejected).append(MldNec.wrap(Arrays.copyOf(packet,size)),0,new ArrayList<Double>());
+            require(rejected.isEmpty(),"truncated NEC registration rejected ("+size+")");
+        }
+        for(int type=0;type<4;type++){
+            byte[] bad=packet.clone();
+            if(type==0)bad[5]=(byte)0x81; // Stereo is not interleaved mono.
+            if(type==1)bad[5]=0; // Unverified format.
+            if(type==2)bad[4]=32; // Out-of-range resource.
+            if(type==3)bad[6]=0; // Unsupported rate.
+            List<byte[]> rejected=new ArrayList<byte[]>();new MldNec(rejected).append(MldNec.wrap(bad),0,new ArrayList<Double>());
+            require(rejected.isEmpty(),"unsupported NEC format is not rendered as noise ("+type+")");
+        }
+        List<Double> missing=new ArrayList<Double>();new MldNec(new ArrayList<byte[]>()).append(MldNec.wrap(on),0,missing);
+        require(missing.isEmpty(),"NEC unregistered stream does not play another resource");
+        byte[] unsupported=packet.clone();unsupported[5]=0;nec.append(MldNec.wrap(unsupported),.8,events);
+        int count=events.size();nec.append(MldNec.wrap(on),.9,events);
+        require(events.size()==count,"NEC unsupported replacement does not reuse stale wave data");
+        List<byte[]> oddSamples=new ArrayList<byte[]>();
+        new MldNec(oddSamples).append(MldNec.wrap(Arrays.copyOf(packet,packet.length-1)),0,new ArrayList<Double>());
+        byte[] aligned=oddSamples.get(0);ByteBuffer header=ByteBuffer.wrap(aligned).order(ByteOrder.LITTLE_ENDIAN);
+        require(aligned.length%2==0&&header.getInt(40)==aligned.length-44&&
+                Math.abs(ClockPlayer.waveDuration(aligned)-15750)<1000000.0/header.getInt(24)+1,
+                "NEC fractional resampling ends on a full PCM frame with a consistent WAVE header");
+        ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(sharpMld(packet,on)));
+        require(Math.abs(timeOf(clock.getAudioEvents(),256,0)-.25)<1e-6,"NEC StreamOn survives MLD conversion and follows the tempo map");
+    }
     static byte[] bytes(Sequence sequence)throws Exception{
         ByteArrayOutputStream out=new ByteArrayOutputStream();MidiSystem.write(sequence,1,out);return out.toByteArray();
     }
@@ -133,6 +178,7 @@ public class AudioChecks {
             Mobile.isDoJa=true;Mobile.sound=false;Mobile.minLogLevel=Mobile.LOG_NONE;
             adpcmChecks();
             sharpChecks();
+            necChecks();
             Sequence sequence=new Sequence(Sequence.PPQ,480);Track track=sequence.createTrack();
             midi(track,0,ShortMessage.PROGRAM_CHANGE,8,0);midi(track,0,ShortMessage.NOTE_ON,69,100);
             midi(track,480,ShortMessage.NOTE_OFF,69,0);

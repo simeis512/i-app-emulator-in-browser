@@ -15,12 +15,13 @@ function showAudioStatus(){
 async function prepareAudio() {
   try {
     if(!audio){audio=new BrowserAudio(new AudioContext({latencyHint:'interactive'}));audio.setInstrumentBank(instrumentBank);}
-    audio.setMaster(audioLevel());await audio.resume();
+    audio.setMaster(audioLevel());audio.setPcmLevel(Number($('pcm-volume').value)/100);await audio.resume();
     showAudioStatus();
   }catch(error){$('audio-status').textContent='音声を開始できません: '+error.message;}
 }
 $('sound').onchange=()=>{if(audio)prepareAudio();else showAudioStatus();};
 $('volume').oninput=()=>{if(audio)audio.setMaster(audioLevel());$('volume-value').textContent=$('volume').value+'%';};
+$('pcm-volume').oninput=()=>{audio?.setPcmLevel(Number($('pcm-volume').value)/100);$('pcm-volume-value').textContent=$('pcm-volume').value+'%';};
 $('instrument-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
   const request=++instrumentRequest;$('instrument-status').textContent='音色ファイルを読み込んでいます…';
@@ -85,6 +86,17 @@ async function start() {
     application=await prepareApplication(files);
     $('warning').textContent=application.warning;$('warning').hidden=!application.warning;
     const ogl=$('renderer').value==='ogl';
+    // The local server can compare JAR fingerprints with the current sources.
+    // Static hosting has no such endpoint; its prebuilt distribution still works.
+    let localBuilds;
+    try {
+      const response=await fetch('/__iapp/status',{cache:'no-store'});
+      if(response.ok){const info=await response.json();if(info.app==='i-app-emulator-in-browser')localBuilds=info.builds;}
+    }catch{}
+    for(const component of ['runtime',...(ogl?['ogl']:[])]){
+      if(localBuilds?.[component]&&localBuilds[component].state!=='current')
+        throw new Error('実行ファイルが古いか、ビルド情報を確認できません。python build.py と python build_ogl.py を成功させてから再読み込みしてください。git pull や serve.py だけでは更新されません。');
+    }
     // Make missing build products actionable before initializing a one-shot JVM.
     for(const name of ['p905i-runtime.jar',...(ogl?['p905i-ogl.jar']:[])]) {
       const response=await fetch(name,{method:'HEAD'});

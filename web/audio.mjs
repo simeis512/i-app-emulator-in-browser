@@ -184,7 +184,7 @@ export class MidiSynth {
 export class BrowserAudio {
   constructor(context,{automatic=true}={}) {
     this.context=context;this.players=new Map();this.counters={notes:0,pcm:0,loaded:0,samples:0,bankNotes:0,bankFallbacks:0};this.errors=[];
-    this.instrumentBank=null;
+    this.instrumentBank=null;this.pcmLevel=0.25;
     this.master=context.createGain();this.master.gain.value=0.3;
     this.limiter=context.createDynamicsCompressor();this.limiter.threshold.value=-6;this.limiter.ratio.value=12;
     this.analyser=context.createAnalyser();this.analyser.fftSize=2048;
@@ -199,6 +199,10 @@ export class BrowserAudio {
     this.reset(player,position,this.context.currentTime+0.01);
   }}
   setMaster(value){this.master.gain.setTargetAtTime(clamp(value,0,1),this.context.currentTime,0.01);}
+  setPcmLevel(value){
+    this.pcmLevel=clamp(value,0,1);
+    for(const player of this.players.values())player.pcmGain?.gain.setTargetAtTime(this.pcmLevel,this.context.currentTime,0.01);
+  }
   setInstrumentBank(bank){
     if(bank===this.instrumentBank)return;
     this.instrumentBank=bank;const now=this.context.currentTime;
@@ -237,12 +241,13 @@ export class BrowserAudio {
   clearSound(player) {
     player.synth?.dispose();player.synth=null;
     for(const pcm of player.pcm.values())try{pcm.source.stop();}catch{}
-    player.pcm.clear();player.gain?.disconnect();player.gain=null;
+    player.pcm.clear();player.pcmGain?.disconnect();player.pcmGain=null;player.gain?.disconnect();player.gain=null;
   }
   reset(player,position,when) {
     this.clearSound(player);player.position=position;player.wallStart=performance.now();player.anchor=when;
     player.lastPump=this.context.currentTime;player.ended=false;player.index=0;
     player.gain=this.context.createGain();player.gain.gain.value=player.volume;player.gain.connect(this.master);
+    player.pcmGain=this.context.createGain();player.pcmGain.gain.value=this.pcmLevel;player.pcmGain.connect(player.gain);
     player.synth=new MidiSynth(this.context,player.gain,this.noise,this.counters,this.instrumentBank);
     const priorPcm=new Map(),events=player.events;
     while(player.index<events.length&&events[player.index]<position) {
@@ -260,7 +265,7 @@ export class BrowserAudio {
     player.pcm.delete(index);if(velocity<=0)return;
     const buffer=player.samples.get(index);if(!buffer||offset>=buffer.duration)return;
     const source=this.context.createBufferSource(),gain=this.context.createGain();source.buffer=buffer;
-    source.playbackRate.value=player.rate;gain.gain.value=velocity/127;source.connect(gain);gain.connect(player.gain);
+    source.playbackRate.value=player.rate;gain.gain.value=velocity/127;source.connect(gain);gain.connect(player.pcmGain);
     const active={source,gain};player.pcm.set(index,active);this.counters.pcm++;
     source.onended=()=>{source.disconnect();gain.disconnect();if(player.pcm.get(index)===active)player.pcm.delete(index);};
     source.start(when,offset);

@@ -13,6 +13,8 @@
 <label for="renderer">描画モード</label><select id="renderer"><option value="2d">2D（通常）</option><option value="ogl">OpenGL ES / 3D（実験的）</option></select>
 <div class="audio-controls"><label><input id="sound" type="checkbox" checked> 音声（試験中）</label>
 <label for="volume">音量 <span id="volume-value">30%</span></label><input id="volume" type="range" min="0" max="100" value="30">
+<label for="pcm-volume">PCM音量（効果音など） <span id="pcm-volume-value">25%</span></label><input id="pcm-volume" type="range" min="0" max="100" value="25" aria-describedby="pcm-volume-note">
+<p id="pcm-volume-note" class="note">BGMなどの合成音に対するPCMの音量を調整します。100%で従来の音量です。</p>
 <p id="audio-status" class="note" role="status">標準の簡易音源で再生します。端末の音色とは異なります。</p>
 <details class="instrument-controls"><summary>外部の音色を使う</summary>
 <label for="instrument-file">音色ファイルを選択</label><input id="instrument-file" type="file" accept=".bin">
