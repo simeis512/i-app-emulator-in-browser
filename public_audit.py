@@ -10,6 +10,8 @@ OWN_FILES='''
 .gitignore
 .github/workflows/check.yml
 README.md
+AGENTS.md
+CLAUDE.md
 LICENSE
 THIRD_PARTY.md
 NOTICE.txt
