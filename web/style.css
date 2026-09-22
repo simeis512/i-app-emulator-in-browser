@@ -18,11 +18,35 @@ body.playing .viewer>.note,body.playing .viewer>details{display:none}
 body.playing .device{flex:1;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
 body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:58px}
 body.playing .device-footer{display:none}
-body.playing .stage{flex:1;min-height:0;container-type:size;display:grid;place-items:center}
-body.playing canvas{width:min(100cqw,calc(100cqh*var(--aspect,1)));height:auto;max-height:100cqh}
+body.playing .stage{flex:1;min-height:0;container-type:size;display:flex;flex-direction:column;justify-content:center}
+body.playing canvas{width:min(100cqw,calc((100cqh - 30px)*var(--aspect,1)));height:auto;align-self:center}
 body.playing .controls{display:block;padding:0 6px 6px}
 body.playing .controls>*{display:none}
 body.playing .controls>.keypad{display:grid;margin:0;max-width:none;gap:4px}
 body.playing .keypad button{min-height:34px;padding:3px;font-size:12px;line-height:1.25}
 body.playing .keypad small{display:none}
+}
+
+/* A handset dial is a ring, so the outer band sends a direction and a diagonal sends two. */
+.keypad{display:flex;flex-direction:column;gap:6px}
+.dpad-row{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+.side{display:grid;gap:6px}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.dpad{position:relative;width:var(--dial,128px);height:var(--dial,128px);border-radius:50%;
+background:#202b3c;border:1px solid #3d4c64;display:grid;place-items:center;touch-action:none;user-select:none}
+.dpad i{position:absolute;font-style:normal;font-size:14px;line-height:1;color:#adbdd0;padding:2px 4px;border-radius:5px}
+.dpad i.up,.dpad i.down{left:50%;transform:translateX(-50%)}
+.dpad i.left,.dpad i.right{top:50%;transform:translateY(-50%)}
+.dpad i.up{top:7px}.dpad i.down{bottom:7px}.dpad i.left{left:9px;transform:translateY(-50%)}.dpad i.right{right:9px;transform:translateY(-50%)}
+.dpad.up i.up,.dpad.down i.down,.dpad.left i.left,.dpad.right i.right{background:#81c9ff;color:#0e1a27}
+.dpad .center{width:calc(var(--dial,128px)*.44);height:calc(var(--dial,128px)*.44);border-radius:50%;padding:0;min-height:0;font-size:12px}
+.soft-labels{display:flex;justify-content:space-between;gap:10px;margin-top:8px;padding:5px 9px;
+border:1px solid #33425a;border-radius:7px;background:#141d2a;font-size:12px;color:#c6d9ec;min-height:29px}
+.soft-labels span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#soft2{text-align:right}
+@media(max-width:750px){
+body.playing .dpad{--dial:112px}
+body.playing .controls>.keypad{display:flex}
+body.playing .soft-labels{margin:6px 0 0;font-size:11px;min-height:0}
+body.playing .keypad .center{font-size:11px}
 }

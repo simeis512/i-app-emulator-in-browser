@@ -122,6 +122,11 @@ async function start() {
       async Java_p905i_web_BrowserAudio_sampleNative(lib,id,index,bytes){audio?.sample(id,index,bytes);},
       async Java_p905i_web_BrowserAudio_controlNative(lib,id,command,position,rate,volume){audio?.control(id,command,position,rate,volume);},
       async Java_p905i_web_BrowserAudio_syncNative(lib,id,channel,key){audio?.sync(id,channel,key);},
+      async Java_p905i_web_BrowserRuntime_softLabels(lib,utf8) {
+        const [left='',right='']=new TextDecoder().decode(Uint8Array.from(utf8)).split(String.fromCharCode(10));
+        $('soft1').textContent=left;$('soft2').textContent=right;
+        $('soft-labels').hidden=!left&&!right;
+      },
       async Java_p905i_web_BrowserRuntime_present(lib,pixels,width,height) {
         if(width!==canvas.width || height!==canvas.height) {
           canvas.width=width;canvas.height=height;imageData=ctx.createImageData(width,height);
@@ -190,6 +195,32 @@ for(const button of document.querySelectorAll('[data-key]')) {
   button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);key('pointer:'+e.pointerId,code,true);};
   button.onpointerup=button.onpointercancel=button.onlostpointercapture=e=>key('pointer:'+e.pointerId,code,false);
 }
+// A handset dial is a ring: the outer band sends a direction and a diagonal sends two.
+const dpad=$('dpad');
+const DIAL=[[-3],[-3,-1],[-1],[-4,-1],[-4],[-4,-2],[-2],[-3,-2],[-3]];
+function dpadAim(event) {
+  const box=dpad.getBoundingClientRect(),x=event.clientX-box.left-box.width/2,y=event.clientY-box.top-box.height/2;
+  if(Math.hypot(x,y)<box.width*.24)return [];
+  return DIAL[Math.round(Math.atan2(y,x)*4/Math.PI)+4];
+}
+function dpadShow(codes) {
+  for(const [code,name] of [[-1,'up'],[-2,'down'],[-3,'left'],[-4,'right']])dpad.classList.toggle(name,codes.includes(code));
+}
+function dpadSet(pointer,codes) {
+  // One source per axis, so a diagonal holds both without either cancelling the other.
+  for(const [axis,wanted] of [['h',codes.find(code=>code===-3||code===-4)],['v',codes.find(code=>code===-1||code===-2)]]) {
+    const source=`dpad${pointer}:${axis}`,held=sources.get(source);
+    if(held!==undefined&&held!==wanted)key(source,held,false);
+    if(wanted!==undefined&&held!==wanted)key(source,wanted,true);
+  }
+  dpadShow(codes);
+}
+dpad.onpointerdown=e=>{
+  if(e.target.closest('button'))return;
+  e.preventDefault();dpad.setPointerCapture(e.pointerId);dpadSet(e.pointerId,dpadAim(e));
+};
+dpad.onpointermove=e=>{if(dpad.hasPointerCapture(e.pointerId))dpadSet(e.pointerId,dpadAim(e));};
+dpad.onpointerup=dpad.onpointercancel=dpad.onlostpointercapture=e=>dpadSet(e.pointerId,[]);
 function keycode(e) {
   const map={ArrowUp:-1,ArrowDown:-2,ArrowLeft:-3,ArrowRight:-4,Enter:-5,' ':-5,z:-6,Z:-6,x:-7,X:-7,
     Backspace:CLEAR,'*':42,'#':35};
@@ -200,7 +231,7 @@ document.addEventListener('keydown',e=>{
   const code=keycode(e);if(code!==undefined && runtime){e.preventDefault();key('keyboard:'+e.code,code,true);}
 });
 document.addEventListener('keyup',e=>key('keyboard:'+e.code,keycode(e),false));
-function release(){for(const [source,code] of [...sources])key(source,code,false);padRelease();}
+function release(){for(const [source,code] of [...sources])key(source,code,false);padRelease();dpadShow([]);}
 window.addEventListener('blur',release);document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
 
 // Gamepads feed the same key() path as touch and keyboard, so a held key stays consistent.

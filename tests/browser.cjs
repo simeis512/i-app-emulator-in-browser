@@ -151,6 +151,16 @@ async function main() {
     assert.equal(page.url(),address,'Backspace must not navigate away');
     assert.deepEqual(errors,[]);
     console.log('PASS clear key from the keypad and Backspace, as a press and release pair');
+    // The handset showed these below the screen, so they must not cover the application.
+    await page.waitForFunction(()=>document.querySelector('#soft1').textContent==='メニュー');
+    assert.equal(await page.locator('#soft2').textContent(),'終了');
+    assert.ok(await page.locator('#soft-labels').isVisible());
+    assert.deepEqual(await pixel(120,232),[17,34,51,255],'no label bar is drawn over the canvas');
+    await page.locator('.numpad button[data-key="35"]').click();
+    await page.waitForFunction(()=>document.querySelector('#soft1').textContent==='もどる');
+    assert.equal(await page.locator('#soft2').textContent(),'終了');
+    await page.locator('#screen').focus();
+    console.log('PASS soft key labels appear below the screen and follow the application');
 
     console.log('Browser: reload and restore browser save over original SP');
     await page.route('**/__iapp/status',route=>route.fulfill({status:404,body:'Static host'}));
@@ -175,6 +185,27 @@ async function main() {
     assert.ok(layout.padTop>=layout.top+layout.height-1,'the keypad sits below the screen');
     assert.ok(layout.width>=240,'the screen is scaled up to the available width');
     assert.ok(layout.scroll<=layout.inner+1,'play mode does not scroll the page');
+    // A handset dial is a ring, so a diagonal has to send both directions at once.
+    const dial=await page.locator('#dpad').boundingBox();
+    const centre=[dial.x+dial.width/2,dial.y+dial.height/2],reach=dial.width*.4;
+    async function press(dx,dy) {
+      await page.mouse.move(centre[0]+dx*reach,centre[1]+dy*reach);
+      await page.mouse.down();await page.waitForTimeout(120);await page.mouse.up();
+      await page.waitForTimeout(120);
+    }
+    assert.deepEqual(await pixel(60,75),[17,34,51,255]);
+    await press(.707,-.707);
+    assert.deepEqual(await pixel(60,75),[120,210,255,255],'up and right arrive together');
+    assert.deepEqual(await pixel(40,95),[17,34,51,255]);
+    await press(-.707,.707);
+    assert.deepEqual(await pixel(40,95),[120,210,255,255],'down and left arrive together');
+    assert.equal((await save()).readInt32BE(0),36,'the diagonals cancel out again');
+    await press(1,0);
+    await page.waitForFunction(async()=>atob(await window.iapp.exportScratchpad()).charCodeAt(3)===56);
+    await press(-1,0);
+    await page.waitForFunction(async()=>atob(await window.iapp.exportScratchpad()).charCodeAt(3)===36);
+    assert.deepEqual(errors,[]);
+    console.log('PASS ring dial sends single directions and diagonals');
     await page.locator('#leave-play').click();
     await page.waitForFunction(()=>!document.body.classList.contains('playing'));
     assert.ok(await page.locator('#start').isVisible(),'leaving play mode shows the settings again');

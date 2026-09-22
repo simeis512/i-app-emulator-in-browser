@@ -7,7 +7,7 @@ import java.io.*;
 public class TestIappli extends IApplication {
     public void start() { Display.setCurrent(new TestCanvas()); }
     static class TestCanvas extends Canvas implements Runnable {
-        int x=16, frames;
+        int x=16, y=90, frames;
         AudioPresenter music, effect, adpcm, sharp;
         MediaSound packed, nec;
         TestCanvas() {
@@ -17,6 +17,7 @@ public class TestIappli extends IApplication {
             try {
                 MediaSound melody=MediaManager.getSound("resource:///fixture.mid");melody.use();
                 music=AudioPresenter.getAudioPresenter(0);music.setSound(melody);
+                setSoftLabel(SOFT_KEY_1,"メニュー");setSoftLabel(SOFT_KEY_2,"終了");
                 music.setAttribute(AudioPresenter.LOOP_COUNT,-1);music.play();
                 MediaSound pcm=MediaManager.getSound("resource:///fixture.wav");pcm.use();
                 effect=AudioPresenter.getAudioPresenter(1);effect.setSound(pcm);
@@ -43,6 +44,9 @@ public class TestIappli extends IApplication {
             if(type!=Display.KEY_PRESSED_EVENT)return;
             if(key==Display.KEY_RIGHT)x=Math.min(200,x+20);
             if(key==Display.KEY_LEFT)x=Math.max(8,x-20);
+            if(key==Display.KEY_UP)y=Math.max(30,y-20);
+            if(key==Display.KEY_DOWN)y=Math.min(200,y+20);
+            if(key==Display.KEY_POUND)setSoftLabel(SOFT_KEY_1,"もどる");
             if(key==Display.KEY_1)effect.play();
             if(key==Display.KEY_2){adpcm.stop();adpcm.setSound(packed);adpcm.play();}
             if(key==Display.KEY_0){adpcm.stop();adpcm.setSound(nec);adpcm.play();}
@@ -57,7 +61,7 @@ public class TestIappli extends IApplication {
         }
         public void paint(Graphics g) {
             g.lock();g.setColor(Graphics.getColorOfRGB(17,34,51));g.fillRect(0,0,getWidth(),getHeight());
-            g.setColor(Graphics.getColorOfRGB(120,210,255));g.fillRect(x,90,20,20);
+            g.setColor(Graphics.getColorOfRGB(120,210,255));g.fillRect(x,y,20,20);
             g.setColor(Graphics.getColorOfRGB(255,255,255));g.drawString("Original test fixture",12,30);
             g.drawString("x="+x+" frame="+frames,12,52);
             if(cleared>0){g.setColor(Graphics.getColorOfRGB(255,180,60));g.fillRect(200,10,20,20);}

@@ -26,23 +26,27 @@
 <p class="note">初回起動には実行環境の取得で時間がかかります。音声はMLD／MIDIと一部PCMに対応。通信は未対応。3Dは低速で、反射などの表現に制限があります。</p>
 <div id="status" role="status">JARとJAMを選択してください。</div>
 <p id="warning" class="note" role="status" hidden></p>
-<h2>操作</h2><p class="note">方向キー・Enter／Space・数字キー。Zは左ソフトキー、Xは右ソフトキー、BackSpaceはクリアキー。横持ちアプリはキーの向きが異なります。</p>
+<h2>操作</h2><p class="note">方向キー・Enter／Space・数字キー。Zは左ソフトキー、Xは右ソフトキー、BackSpaceはクリアキー。横持ちアプリはキーの向きが異なります。<br>画面上の方向キーは外周を押します。斜めを押すと縦横の2方向が同時に入り、押したまま指を動かすと向きが変わります。</p>
 <details class="pad-controls"><summary>ゲームパッド</summary>
 <p id="pad-status" class="note" role="status">接続されていません。ボタンを押すと認識します。</p>
 <p class="note">標準配置に対応します。十字キーと左スティック、A＝決定、B＝クリア、X／Y＝左右ソフトキー、L／R＝＊／＃、Select／Start＝1／3。</p>
 <button id="pad-remap" type="button" disabled>割り当てを変更</button><button id="pad-reset" type="button" disabled>標準に戻す</button>
 <p id="pad-remap-status" class="note" role="status" hidden></p></details>
 <div class="keypad">
-<button data-key="-6">左ソフト<br><small>Z</small></button><button data-key="-1">↑</button><button data-key="-7">右ソフト<br><small>X</small></button>
-<button data-key="-3">←</button><button data-key="-5">決定</button><button data-key="-4">→</button>
-<i></i><button data-key="-2">↓</button><button data-key="-8">クリア<br><small>BS</small></button>
+<div class="dpad-row"><button data-key="-6">左ソフト<br><small>Z</small></button>
+<div class="dpad" id="dpad" role="group" aria-label="方向キー。外周を押します。斜めは両方向が同時に入ります。">
+<i class="up">↑</i><i class="right">→</i><i class="down">↓</i><i class="left">←</i>
+<button data-key="-5" class="center">決定</button></div>
+<div class="side"><button data-key="-7">右ソフト<br><small>X</small></button><button data-key="-8">クリア<br><small>BS</small></button></div></div>
+<div class="numpad">
 <button data-key="49">1</button><button data-key="50">2</button><button data-key="51">3</button>
 <button data-key="52">4</button><button data-key="53">5</button><button data-key="54">6</button>
 <button data-key="55">7</button><button data-key="56">8</button><button data-key="57">9</button>
 <button data-key="42">＊</button><button data-key="48">0</button><button data-key="35">＃</button>
-</div><button id="screenshot" disabled>画面を保存</button><button id="export-save" disabled>SPを書き出す</button>
+</div></div><button id="screenshot" disabled>画面を保存</button><button id="export-save" disabled>SPを書き出す</button>
 </section><section class="viewer"><div class="device"><div class="device-label"><span id="app-name">i-appli</span><span id="resolution">240 × 240</span></div>
-<div class="stage"><canvas id="screen" width="240" height="240" aria-label="iアプリ画面" tabindex="0"></canvas></div>
+<div class="stage"><canvas id="screen" width="240" height="240" aria-label="iアプリ画面" tabindex="0"></canvas>
+<div id="soft-labels" class="soft-labels" hidden><span id="soft1"></span><span id="soft2"></span></div></div>
 <div class="device-footer"><span id="frame-count">待機中</span><span id="fps">DoJa 5.1</span></div></div>
 <p class="note">選択ファイルをアップロードする機能はありません。保存はこのブラウザ内でアプリごとに保持します。同じアプリの保存が既にある場合は、選択したSPより既存の保存を優先します。</p>
 <p class="note">切り替え・再起動は再読み込み後にファイルを選び直してください。ブラウザの保存領域を消す前にSPを書き出してください。</p>

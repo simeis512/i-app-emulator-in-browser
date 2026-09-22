@@ -19,6 +19,8 @@ public final class BrowserRuntime {
     /** Browser-side code for CLEAR, outside every key range the upstream tables use. */
     public static final int CLEAR = -8;
     private static native void present(int[] argb, int width, int height);
+    private static native void softLabels(byte[] utf8);
+    private static String labels = "";
 
     public static synchronized void start(String jar, String jam, String sp, String saves,
             int width, int height, final boolean browser) throws Exception {
@@ -60,6 +62,7 @@ public final class BrowserRuntime {
                 if (browser) {
                     BufferedImage img = platform.getLcdFrontbuffer().getCanvas();
                     present(((DataBufferInt) img.getRaster().getDataBuffer()).getData(), img.getWidth(), img.getHeight());
+                    pushLabels();
                 }
             }
         });
@@ -114,6 +117,20 @@ public final class BrowserRuntime {
         failure = e.toString();
         recordLog("FATAL: " + failure);
         e.printStackTrace();
+    }
+    /** The handset showed the soft key labels outside the application area, so report them
+     * to the page instead of painting over the application's own pixels. */
+    private static void pushLabels() {
+        com.nttdocomo.ui.Frame frame = com.nttdocomo.ui.Display.getCurrent();
+        String left = "", right = "";
+        if (frame != null && frame.labelVisible) {
+            if (frame.softLabels[0] != null) left = frame.softLabels[0];
+            if (frame.softLabels[1] != null) right = frame.softLabels[1];
+        }
+        String current = left + (char) 10 + right;
+        if (current.equals(labels)) return;
+        labels = current;
+        try { softLabels(current.getBytes("UTF-8")); } catch (java.io.UnsupportedEncodingException e) { }
     }
     public static synchronized void recordLog(String line) {
         if (events.length() > 60000) events.delete(0,30000);

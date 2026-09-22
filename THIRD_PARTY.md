@@ -14,8 +14,9 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
 - Changes: browser frontend bridge, scratchpad offsets/boundaries and repeated
   close handling, PhoneSystem attribute validation, image clipping, log capture,
   music clock, browser volume/tempo routing, DoJa synchronization callbacks and
-  ADAT resource decoding that retains indices for unsupported samples, and
-  resampled WAVE payload sizes rounded to complete PCM frames.
+  ADAT resource decoding that retains indices for unsupported samples,
+  resampled WAVE payload sizes rounded to complete PCM frames, and soft key
+  labels reported to the browser frontend rather than drawn over the canvas.
 
 Separately licensed components retained from that snapshot:
 

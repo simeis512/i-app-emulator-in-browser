@@ -27,6 +27,12 @@ def patched_sources():
     dst.write_text(MODIFIED+text, encoding='utf-8')
     patches = {rel: dst}
     for rel, replacements in {
+        'com/nttdocomo/ui/Canvas.java': [
+            # The page draws the soft key labels below the screen, as the handset did, so the
+            # upstream bar must not fade in and out over the application's own pixels.
+            ('if (labelVisible) { paintCommandsBar(); }',
+             '{ /* labels are reported to the browser frontend instead */ }'),
+        ],
         'javax/microedition/media/decoders/WAVTools.java': [
             ('final int newLength = (int) (inputLength * ((double) newSampleRate / originalSampleRate));',
              '''int frameBytes = numChannels * (numBits / 8);
