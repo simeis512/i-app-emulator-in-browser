@@ -198,14 +198,38 @@ for(const button of document.querySelectorAll('[data-key]')) {
 }
 // A handset dial is a ring: the outer band sends a direction and a diagonal sends two.
 const dpad=$('dpad');
-const DIAL=[[-3],[-3,-1],[-1],[-4,-1],[-4],[-4,-2],[-2],[-3,-2],[-3]];
+// Clockwise from the right, matching the screen angle of a press.
+const DIAL=[[-4],[-4,-2],[-2],[-3,-2],[-3],[-3,-1],[-1],[-4,-1]];
+const ARROW={'-1':'↑','-2':'↓','-3':'←','-4':'→'},SPOT=['right','down','left','up'];
+let keypadTurn=0;
+// Turning the handset moves every key with it, so the dial sends the rotated direction.
+const turnShift=()=>keypadTurn===0?0:keypadTurn<0?2:6;
+function applyTurn() {
+  for(let index=0;index<4;index++) {
+    const code=DIAL[(index*2+turnShift())%8][0],glyph=dpad.querySelector('i.'+SPOT[index]);
+    glyph.textContent=ARROW[code];glyph.dataset.code=code;
+  }
+  const keypad=document.querySelector('.keypad');
+  keypad.classList.toggle('turn-left',keypadTurn<0);keypad.classList.toggle('turn-right',keypadTurn>0);
+  const numpad=document.querySelector('.numpad');
+  [...numpad.children].forEach((button,index)=>{
+    const row=Math.floor(index/3)+1,column=index%3+1;
+    button.style.gridArea=keypadTurn===0?'':keypadTurn<0?`${4-column}/${row}`:`${column}/${5-row}`;
+  });
+  try{localStorage.setItem('keypadTurn',String(keypadTurn));}catch{}
+}
+try{keypadTurn=Number(localStorage.getItem('keypadTurn'))||0;}catch{}
+$('keypad-turn').value=String(keypadTurn);
+$('keypad-turn').onchange=()=>{release();keypadTurn=Number($('keypad-turn').value);applyTurn();};
+applyTurn();
 function dpadAim(event) {
   const box=dpad.getBoundingClientRect(),x=event.clientX-box.left-box.width/2,y=event.clientY-box.top-box.height/2;
   if(Math.hypot(x,y)<box.width*.24)return [];
-  return DIAL[Math.round(Math.atan2(y,x)*4/Math.PI)+4];
+  const index=((Math.round(Math.atan2(y,x)*4/Math.PI)%8)+8)%8;
+  return DIAL[(index+turnShift())%8];
 }
 function dpadShow(codes) {
-  for(const [code,name] of [[-1,'up'],[-2,'down'],[-3,'left'],[-4,'right']])dpad.classList.toggle(name,codes.includes(code));
+  for(const glyph of dpad.querySelectorAll('i'))glyph.classList.toggle('on',codes.includes(Number(glyph.dataset.code)));
 }
 function dpadSet(pointer,codes) {
   // One source per axis, so a diagonal holds both without either cancelling the other.

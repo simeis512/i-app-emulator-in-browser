@@ -39,7 +39,7 @@ background:#202b3c;border:1px solid #3d4c64;display:grid;place-items:center;touc
 .dpad i.up,.dpad i.down{left:50%;transform:translateX(-50%)}
 .dpad i.left,.dpad i.right{top:50%;transform:translateY(-50%)}
 .dpad i.up{top:7px}.dpad i.down{bottom:7px}.dpad i.left{left:9px;transform:translateY(-50%)}.dpad i.right{right:9px;transform:translateY(-50%)}
-.dpad.up i.up,.dpad.down i.down,.dpad.left i.left,.dpad.right i.right{background:#81c9ff;color:#0e1a27}
+.dpad i.on{background:#81c9ff;color:#0e1a27}
 .dpad .center{width:calc(var(--dial,128px)*.44);height:calc(var(--dial,128px)*.44);border-radius:50%;padding:0;min-height:0;font-size:12px}
 .soft-labels{display:flex;justify-content:space-between;gap:10px;margin-top:8px;padding:5px 9px;
 border:1px solid #33425a;border-radius:7px;background:#141d2a;font-size:12px;color:#c6d9ec;min-height:29px}
@@ -64,3 +64,14 @@ body.playing .keypad button{min-height:26px;font-size:11px;padding:2px}
 body.playing .dpad-row{gap:3px}
 body.playing .numpad{gap:3px}
 }
+
+/* Turning the handset carried the whole keypad with it, legends and all. */
+.keypad.turn-left .numpad,.keypad.turn-right .numpad{grid-template-columns:repeat(4,1fr)}
+.keypad.turn-left>.dpad-row>.soft2{grid-area:1/1}
+.keypad.turn-left>.dpad-row>.soft1{grid-area:2/1}
+.keypad.turn-left>.dpad-row>.dpad{grid-area:1/2/span 2}
+.keypad.turn-left>.dpad-row>.clear{grid-area:1/3/span 2;align-self:center}
+.keypad.turn-right>.dpad-row>.clear{grid-area:1/1/span 2;align-self:center;justify-self:stretch}
+.keypad.turn-right>.dpad-row>.dpad{grid-area:1/2/span 2}
+.keypad.turn-right>.dpad-row>.soft1{grid-area:1/3}
+.keypad.turn-right>.dpad-row>.soft2{grid-area:2/3}

@@ -161,6 +161,25 @@ async function main() {
     assert.equal(await page.locator('#soft2').textContent(),'終了');
     await page.locator('#screen').focus();
     console.log('PASS soft key labels appear below the screen and follow the application');
+    // Turning the handset carried the dial with it, so the same spot sends a rotated direction.
+    async function spot(fx,fy) {
+      const ring=await page.locator('#dpad').boundingBox();
+      await page.mouse.move(ring.x+ring.width*fx,ring.y+ring.height*fy);
+      await page.mouse.down();await page.waitForTimeout(120);await page.mouse.up();
+      await page.waitForTimeout(150);
+    }
+    await page.locator('#keypad-turn').selectOption('-1');
+    assert.equal(await page.locator('#dpad i.left').textContent(),'↑');
+    assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad button')).gridArea.split(' / ').slice(0,2).join(',')),'3,1');
+    await spot(.08,.5);
+    assert.deepEqual(await pixel(40,75),[120,210,255,255],'the left of a left-turned dial sends up');
+    await spot(.92,.5);
+    assert.deepEqual(await pixel(40,95),[120,210,255,255],'its right sends down again');
+    await page.locator('#keypad-turn').selectOption('0');
+    assert.equal(await page.locator('#dpad i.left').textContent(),'←');
+    assert.equal((await save()).readInt32BE(0),36,'turning the keypad leaves the scratchpad alone');
+    assert.deepEqual(errors,[]);
+    console.log('PASS keypad turns with the handset, moving keys and directions together');
 
     console.log('Browser: reload and restore browser save over original SP');
     await page.route('**/__iapp/status',route=>route.fulfill({status:404,body:'Static host'}));
