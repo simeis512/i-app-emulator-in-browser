@@ -169,14 +169,18 @@ async function main() {
       await page.waitForTimeout(150);
     }
     await page.locator('#keypad-turn').selectOption('-1');
-    assert.equal(await page.locator('#dpad i.left').textContent(),'↑');
+    // The printed arrows still point outward; only the key behind each one changes.
+    assert.equal(await page.locator('#dpad i.left').textContent(),'←');
+    assert.equal(await page.locator('#dpad i.left').getAttribute('data-code'),'-1');
+    assert.match(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad .cap')).transform),
+      /matrix\(-?0(\.\d+)?, -1, 1, /,'the legends turn with the keys');
     assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad button')).gridArea.split(' / ').slice(0,2).join(',')),'3,1');
     await spot(.08,.5);
     assert.deepEqual(await pixel(40,75),[120,210,255,255],'the left of a left-turned dial sends up');
     await spot(.92,.5);
     assert.deepEqual(await pixel(40,95),[120,210,255,255],'its right sends down again');
     await page.locator('#keypad-turn').selectOption('0');
-    assert.equal(await page.locator('#dpad i.left').textContent(),'←');
+    assert.equal(await page.locator('#dpad i.left').getAttribute('data-code'),'-3');
     assert.equal((await save()).readInt32BE(0),36,'turning the keypad leaves the scratchpad alone');
     assert.deepEqual(errors,[]);
     console.log('PASS keypad turns with the handset, moving keys and directions together');
@@ -238,6 +242,24 @@ async function main() {
       inner:innerHeight,scroll:document.documentElement.scrollHeight}));
     assert.ok(turned.playing,'a sideways phone stays in play mode');
     assert.ok(turned.padBottom<=turned.inner+1&&turned.scroll<=turned.inner+1,'sideways still needs no scrolling');
+    // Turned and sideways the two halves take a bottom corner each, with the screen between them.
+    await page.evaluate(()=>{document.querySelector('#keypad-turn').value='-1';
+      document.querySelector('#keypad-turn').dispatchEvent(new Event('change'));});
+    await page.waitForTimeout(300);
+    const grip=await page.evaluate(()=>{
+      const box=s=>document.querySelector(s).getBoundingClientRect();
+      const dial=box('.dpad-row'),numbers=box('.numpad'),screen=box('#screen');
+      return {dialLeft:dial.left,dialBottom:dial.bottom,numRight:numbers.right,numBottom:numbers.bottom,
+        screenLeft:screen.left,screenRight:screen.right,screenWidth:screen.width,
+        inner:innerHeight,width:innerWidth,scroll:document.documentElement.scrollHeight};
+    });
+    assert.ok(grip.dialLeft<20&&grip.numRight>grip.width-20,'the halves sit at opposite edges');
+    assert.ok(grip.dialBottom>grip.inner-20&&grip.numBottom>grip.inner-20,'both halves sit at the bottom');
+    assert.ok(grip.screenLeft>grip.dialLeft+100&&grip.screenRight<grip.numRight-100,'the screen sits between them');
+    assert.ok(grip.screenWidth>300&&grip.scroll<=grip.inner+1,'the screen still fills the middle without scrolling');
+    await page.evaluate(()=>{document.querySelector('#keypad-turn').value='0';
+      document.querySelector('#keypad-turn').dispatchEvent(new Event('change'));});
+    console.log('PASS turned and sideways, the keypad splits to both bottom corners');
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(()=>document.body.classList.contains('playing'));
     console.log('PASS play mode keeps screen and keypad visible upright and sideways');

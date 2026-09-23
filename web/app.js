@@ -200,17 +200,21 @@ for(const button of document.querySelectorAll('[data-key]')) {
 const dpad=$('dpad');
 // Clockwise from the right, matching the screen angle of a press.
 const DIAL=[[-4],[-4,-2],[-2],[-3,-2],[-3],[-3,-1],[-1],[-4,-1]];
-const ARROW={'-1':'↑','-2':'↓','-3':'←','-4':'→'},SPOT=['right','down','left','up'];
+const SPOT=['right','down','left','up'];
 let keypadTurn=0;
+// Legends were printed on the keys, so turning the handset turns them with it.
+for(const button of document.querySelectorAll('.keypad button')) {
+  const cap=document.createElement('span');cap.className='cap';cap.append(...button.childNodes);button.append(cap);
+}
 // Turning the handset moves every key with it, so the dial sends the rotated direction.
 const turnShift=()=>keypadTurn===0?0:keypadTurn<0?2:6;
 function applyTurn() {
-  for(let index=0;index<4;index++) {
-    const code=DIAL[(index*2+turnShift())%8][0],glyph=dpad.querySelector('i.'+SPOT[index]);
-    glyph.textContent=ARROW[code];glyph.dataset.code=code;
+  // The arrows stay printed outward; turning changes which key each position is.
+  for(let index=0;index<4;index++)
+    dpad.querySelector('i.'+SPOT[index]).dataset.code=DIAL[(index*2+turnShift())%8][0];
+  for(const element of [document.querySelector('.keypad'),document.body]) {
+    element.classList.toggle('turn-left',keypadTurn<0);element.classList.toggle('turn-right',keypadTurn>0);
   }
-  const keypad=document.querySelector('.keypad');
-  keypad.classList.toggle('turn-left',keypadTurn<0);keypad.classList.toggle('turn-right',keypadTurn>0);
   const numpad=document.querySelector('.numpad');
   [...numpad.children].forEach((button,index)=>{
     const row=Math.floor(index/3)+1,column=index%3+1;
