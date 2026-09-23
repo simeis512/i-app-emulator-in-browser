@@ -84,6 +84,12 @@ def patched_sources():
             ('Mobile.log(Mobile.LOG_WARNING, AudioPresenter.class.getPackage().getName() + "." + AudioPresenter.class.getSimpleName() + ": " + "setSyncEvent not implemented. channel: " + channel + " key:" + key);',
              'syncChannel = channel; syncKey = key;'),
         ],
+        'org/recompile/mobile/MIDletEnhancements.java': [
+            # Thread.yield only hands the CPU over. DoJa frames are already limited after each flush, so limiting
+            # here as well added a whole frame of waiting to any loop that yields once per frame.
+            ('public static void yieldOverride() throws InterruptedException { Mobile.getPlatform().limitFps(); }',
+             'public static void yieldOverride() throws InterruptedException { if (Mobile.isDoJa) { Thread.yield(); return; } Mobile.getPlatform().limitFps(); }'),
+        ],
         'org/recompile/mobile/Mobile.java': [
             ('synchronized (pendingLogs)\n\t\t{\n\t\t\tpendingLogs.add',
              'p905i.web.BrowserRuntime.recordLog("[" + logLevel + "] " + text);\n\t\tsynchronized (pendingLogs)\n\t\t{\n\t\t\tpendingLogs.add'),

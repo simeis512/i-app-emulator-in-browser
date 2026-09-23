@@ -55,6 +55,11 @@ public final class RuntimeChecks {
             require(vibrationLog.indexOf("Application vibrator on")>=0 &&
                 vibrationLog.indexOf("Application vibrator off")>vibrationLog.indexOf("Application vibrator on"),
                 "both vibrator transitions reach the bridge without a repaint or browser native");
+            // Loaded applications call yieldOverride for Thread.yield; only flushed frames are limited.
+            Mobile.limitFPS=30;long yielding=System.nanoTime();for(int i=0;i<20;i++)MIDletEnhancements.yieldOverride();
+            require(System.nanoTime()-yielding<200_000_000L,"Thread.yield hands over the CPU without waiting for a frame");
+            long limited=System.nanoTime();platform.limitFps();platform.limitFps();
+            require(System.nanoTime()-limited>=25_000_000L,"flushed frames are still held to the frame rate");
 
             PlatformImage source=new PlatformImage(2,2),target=new PlatformImage(4,4);
             Arrays.fill(source.getDataBuffer(),0xffff0000);
