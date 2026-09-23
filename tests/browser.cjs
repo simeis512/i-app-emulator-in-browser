@@ -174,6 +174,10 @@ async function main() {
     assert.equal(await page.locator('#dpad i.left').getAttribute('data-code'),'-1');
     assert.match(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad .cap')).transform),
       /matrix\(-?0(\.\d+)?, -1, 1, /,'the legends turn with the keys');
+    // Handset keys are wide and short, so a turned one has to stand taller than it is wide.
+    const shape=await page.evaluate(()=>{const r=document.querySelector('.numpad button').getBoundingClientRect();
+      return {w:r.width,h:r.height};});
+    assert.ok(shape.h>shape.w*1.4,'a turned key stands taller than it is wide');
     assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad button')).gridArea.split(' / ').slice(0,2).join(',')),'3,1');
     await spot(.08,.5);
     assert.deepEqual(await pixel(40,75),[120,210,255,255],'the left of a left-turned dial sends up');

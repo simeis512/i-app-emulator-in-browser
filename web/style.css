@@ -80,7 +80,11 @@ body.playing .numpad{gap:3px}
 .keypad .cap{display:inline-block}
 .keypad.turn-left .cap{transform:rotate(-90deg)}
 .keypad.turn-right .cap{transform:rotate(90deg)}
-.keypad.turn-left .dpad-row>button,.keypad.turn-right .dpad-row>button{min-height:56px}
+/* Handset keys are wide and short, so turned they stand tall and narrow. */
+.keypad.turn-left,.keypad.turn-right{--key-w:62px;--key-h:104px}
+.keypad.turn-left .numpad,.keypad.turn-right .numpad{grid-template-columns:repeat(4,var(--key-w));justify-content:center}
+.keypad.turn-left .numpad button,.keypad.turn-right .numpad button{min-height:var(--key-h);padding:0}
+.keypad.turn-left .dpad-row>button,.keypad.turn-right .dpad-row>button{width:var(--key-w);min-height:var(--key-h);padding:0;justify-self:center}
 /* Turned and sideways the handset is held like a pad, so the keys take both bottom corners. */
 @media(max-height:560px) and (orientation:landscape){
 body.playing.turn-left .controls,body.playing.turn-right .controls{width:0;padding:0;overflow:visible}
@@ -90,8 +94,8 @@ body.playing.turn-left .numpad,body.playing.turn-right .dpad-row{right:6px}
 body.playing.turn-left .dpad-row,body.playing.turn-left .numpad,
 body.playing.turn-right .dpad-row,body.playing.turn-right .numpad{position:fixed;bottom:6px;z-index:5;margin:0}
 body.playing.turn-left .dpad-row,body.playing.turn-right .dpad-row{grid-template-columns:repeat(3,auto);gap:4px}
-body.playing.turn-left .numpad,body.playing.turn-right .numpad{grid-template-columns:repeat(4,42px);gap:4px}
+body.playing .keypad.turn-left,body.playing .keypad.turn-right{--key-w:40px;--key-h:74px}
+body.playing.turn-left .numpad,body.playing.turn-right .numpad{gap:4px}
 body.playing.turn-left .dpad,body.playing.turn-right .dpad{--dial:76px}
-body.playing.turn-left .numpad button,body.playing.turn-right .numpad button{min-height:36px;padding:0}
-body.playing.turn-left .dpad-row>button,body.playing.turn-right .dpad-row>button{width:46px;min-height:50px;font-size:10px;padding:0}
+body.playing.turn-left .keypad button,body.playing.turn-right .keypad button{font-size:10px}
 }
