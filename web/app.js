@@ -143,9 +143,13 @@ document.addEventListener('fullscreenchange',()=>{$('full-screen').textContent=d
 const canBuzz=typeof navigator.vibrate==='function';
 let appBuzz=0;
 if(!canBuzz){$('haptics').checked=false;$('haptics').disabled=true;$('haptics-note').textContent='この端末・ブラウザは振動に対応していません。';}
+// A pulse this short never reaches the motor on most handsets, so a key needs a real one.
+const TAP=25;
 function buzz(milliseconds){
   if(!canBuzz||!$('haptics').checked)return;
-  try{navigator.vibrate(milliseconds);}catch{}
+  // A browser that declines says so; report it rather than leaving a dead setting.
+  try{if(navigator.vibrate(milliseconds)===false)$('haptics-note').textContent='ブラウザが振動を実行しませんでした。端末のマナーモードや振動の設定を確認してください。';}
+  catch(error){$('haptics-note').textContent='振動を実行できません: '+(error.message||error);}
 }
 function appVibrate(on) {
   clearInterval(appBuzz);appBuzz=0;
@@ -283,7 +287,7 @@ function key(source,code,down) {
 }
 for(const button of document.querySelectorAll('[data-key]')) {
   const code=Number(button.dataset.key);
-  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);buzz(8);key('pointer:'+e.pointerId,code,true);};
+  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);buzz(TAP);key('pointer:'+e.pointerId,code,true);};
   button.onpointerup=button.onpointercancel=button.onlostpointercapture=e=>key('pointer:'+e.pointerId,code,false);
 }
 // A handset dial is a ring: the outer band sends a direction and a diagonal sends two.
@@ -333,7 +337,7 @@ function dpadSet(pointer,codes) {
     if(held!==undefined&&held!==wanted)key(source,held,false);
     if(wanted!==undefined&&held!==wanted)key(source,wanted,true);
   }
-  if(codes.length&&String(codes)!==dpadLast)buzz(8);
+  if(codes.length&&String(codes)!==dpadLast)buzz(TAP);
   dpadLast=String(codes);dpadShow(codes);
 }
 let dpadLast='';

@@ -164,7 +164,9 @@ async function main() {
     // Glass gives nothing back, so a press and an application's own vibration must reach the device.
     await page.evaluate(()=>{window.buzzes=[];navigator.vibrate=value=>{window.buzzes.push(value);return true;};});
     await page.locator('.numpad button[data-key="49"]').click();
-    assert.ok((await page.evaluate(()=>buzzes)).length>0,'a key press answers with a short pulse');
+    const pulses=await page.evaluate(()=>buzzes);
+    assert.ok(pulses.length>0,'a key press answers with a pulse');
+    assert.ok(pulses.every(value=>value>=20),'the pulse is long enough for a motor to answer');
     await page.evaluate(()=>{window.buzzes=[];});
     await page.locator('#screen').focus();await page.keyboard.press('*');
     await page.waitForFunction(()=>buzzes.some(value=>value>=1000));
