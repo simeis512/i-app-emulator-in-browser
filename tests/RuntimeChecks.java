@@ -49,6 +49,12 @@ public final class RuntimeChecks {
             byte[] exported=java.util.Base64.getDecoder().decode(p905i.web.BrowserRuntime.exportScratchpad());
             require(exported.length==8 && exported[7]==77 && exported[0]==10,"SP export uses current records and strips the input header");
             require(PhoneSystem.getAttribute(PhoneSystem.DEV_MANNER)==0,"manner-mode attribute can be read");
+            PhoneSystem.setAttribute(PhoneSystem.DEV_VIBRATOR,PhoneSystem.ATTR_VIBRATOR_ON);
+            PhoneSystem.setAttribute(PhoneSystem.DEV_VIBRATOR,PhoneSystem.ATTR_VIBRATOR_OFF);
+            String vibrationLog=p905i.web.BrowserRuntime.getLog();
+            require(vibrationLog.indexOf("Application vibrator on")>=0 &&
+                vibrationLog.indexOf("Application vibrator off")>vibrationLog.indexOf("Application vibrator on"),
+                "both vibrator transitions reach the bridge without a repaint or browser native");
 
             PlatformImage source=new PlatformImage(2,2),target=new PlatformImage(4,4);
             Arrays.fill(source.getDataBuffer(),0xffff0000);

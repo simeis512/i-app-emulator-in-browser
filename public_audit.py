@@ -52,6 +52,7 @@ tests/browser.cjs
 tests/audio.cjs
 tests/loader.test.mjs
 tests/instruments.test.mjs
+tests/haptics.test.mjs
 tests/instrument-fixture.mjs
 tests/test_server.py
 tests/test_build.py
@@ -61,6 +62,7 @@ web/app.js
 web/loader.mjs
 web/audio.mjs
 web/instruments.mjs
+web/haptics.mjs
 web/style.css
 '''.split()
 

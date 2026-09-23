@@ -2,6 +2,7 @@
 import { addFiles, prepareApplication } from './loader.mjs';
 import { BrowserAudio } from './audio.mjs';
 import { readInstrumentFile } from './instruments.mjs';
+import { BrowserHaptics } from './haptics.mjs';
 const $ = id => document.getElementById(id);
 // CLEAR has no place in the upstream key tables; the runtime delivers it separately.
 const CLEAR = -8;
@@ -140,37 +141,12 @@ $('full-screen').onclick=async()=>{
 };
 document.addEventListener('fullscreenchange',()=>{$('full-screen').textContent=document.fullscreenElement?'全画面解除':'全画面';});
 // Keys on glass give nothing back, so answer a press the way the handset did.
-const canBuzz=typeof navigator.vibrate==='function';
-let appBuzz=0;
-// A pad can arrive later than the page, so never decide once that nothing can rumble.
-function rumblers(){return pads().filter(pad=>pad.vibrationActuator?.playEffect);}
-function haptic(text){if($('haptics-note').textContent!==text)$('haptics-note').textContent=text;}
-// A pulse this short never reaches the motor on most handsets, so a key needs a real one.
-const TAP=25;
-function buzz(milliseconds) {
-  if(!$('haptics').checked)return;
-  let answered=false;
-  if(canBuzz){try{answered=navigator.vibrate(milliseconds)!==false;}catch{}}
-  const strong=milliseconds>200?.9:.6;
-  for(const pad of rumblers()) {
-    answered=true;
-    pad.vibrationActuator.playEffect('dual-rumble',{duration:Math.min(milliseconds,5000),
-      strongMagnitude:strong,weakMagnitude:strong*.6}).catch(()=>{});
-  }
-  haptic(answered?'キー操作とアプリの指示で振動します。':
-    canBuzz?'ブラウザが振動を実行しませんでした。端末のマナーモードや振動の設定を確認してください。':
-    'この端末・ブラウザは振動に対応していません。対応するゲームパッドを接続すると振動します。');
-}
-function hush() {
-  if(canBuzz)try{navigator.vibrate(0);}catch{}
-  for(const pad of rumblers())pad.vibrationActuator.reset?.();
-}
-function appVibrate(on) {
-  clearInterval(appBuzz);appBuzz=0;
-  if(!on||!$('haptics').checked)return hush();
-  buzz(1500);appBuzz=setInterval(()=>buzz(1500),1400);
-}
-$('haptics').onchange=()=>{if(!$('haptics').checked)appVibrate(0);};
+const haptics=new BrowserHaptics(navigator,text=>{$('haptics-note').textContent=text;});
+haptics.visible=!document.hidden;
+function appVibrate(on){haptics.application(on);}
+$('haptics').onchange=()=>haptics.setEnabled($('haptics').checked);
+$('test-haptics').onclick=()=>haptics.pulse(200);
+window.addEventListener('pagehide',()=>haptics.stop());
 matchMedia(PHONE).addEventListener('change',event=>{if(event.matches&&booted)setPlaying(true);});
 chooseSize(); $('size').onchange=chooseSize;
 function selectFiles(incoming) {
@@ -268,7 +244,7 @@ async function start() {
         if(state.startsWith('ERROR:'))status(`未対応の処理で停止: ${state.slice(7)}`,true);
         else if(state==='TERMINATED')status('アプリが終了しました。再起動できます。');
         else status(frames?'実行中 · 操作キーで進めてください。':'起動処理中…');
-        if(state==='TERMINATED'||state.startsWith('ERROR:'))audio?.stopAll();
+        if(state==='TERMINATED'||state.startsWith('ERROR:')){audio?.stopAll();haptics.stop();}
         if(audio?.errors.length)$('audio-status').textContent='一部の音声を再生できません（実行ログを参照）';
         $('log').textContent=(application.warning?application.warning+'\n':'')+log+
           (audio?.errors.length?'\n'+audio.errors.join('\n'):'');
@@ -292,6 +268,7 @@ function key(source,code,down) {
   if(down) {
     if(sources.has(source))return;
     const held=[...sources.values()].includes(code);sources.set(source,code);if(held)return;
+    haptics.pulse();
   } else {
     if(!sources.has(source))return;
     code=sources.get(source);sources.delete(source);if([...sources.values()].includes(code))return;
@@ -301,7 +278,7 @@ function key(source,code,down) {
 }
 for(const button of document.querySelectorAll('[data-key]')) {
   const code=Number(button.dataset.key);
-  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);buzz(TAP);key('pointer:'+e.pointerId,code,true);};
+  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);key('pointer:'+e.pointerId,code,true);};
   button.onpointerup=button.onpointercancel=button.onlostpointercapture=e=>key('pointer:'+e.pointerId,code,false);
 }
 // A handset dial is a ring: the outer band sends a direction and a diagonal sends two.
@@ -351,10 +328,8 @@ function dpadSet(pointer,codes) {
     if(held!==undefined&&held!==wanted)key(source,held,false);
     if(wanted!==undefined&&held!==wanted)key(source,wanted,true);
   }
-  if(codes.length&&String(codes)!==dpadLast)buzz(TAP);
-  dpadLast=String(codes);dpadShow(codes);
+  dpadShow(codes);
 }
-let dpadLast='';
 dpad.onpointerdown=e=>{
   if(e.target.closest('button'))return;
   e.preventDefault();dpad.setPointerCapture(e.pointerId);dpadSet(e.pointerId,dpadAim(e));
@@ -374,7 +349,8 @@ document.addEventListener('keyup',e=>key('keyboard:'+e.code,keycode(e),false));
 function release(){for(const [source,code] of [...sources])key(source,code,false);padRelease();dpadShow([]);}
 window.addEventListener('blur',release);
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){release();appVibrate(0);audio?.suspend();}
+  haptics.setVisible(!document.hidden);
+  if(document.hidden){release();audio?.suspend();}
   else if($('sound').checked)audio?.resume();
 });
 

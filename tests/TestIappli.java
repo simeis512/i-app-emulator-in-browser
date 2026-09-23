@@ -7,7 +7,7 @@ import java.io.*;
 public class TestIappli extends IApplication {
     public void start() { Display.setCurrent(new TestCanvas()); }
     static class TestCanvas extends Canvas implements Runnable {
-        int x=16, y=90, frames;
+        int x=16, y=90, frames;volatile boolean painting=true;
         AudioPresenter music, effect, adpcm, sharp;
         MediaSound packed, nec;
         TestCanvas() {
@@ -52,6 +52,8 @@ public class TestIappli extends IApplication {
                 PhoneSystem.setAttribute(PhoneSystem.DEV_VIBRATOR,
                     buzzing?PhoneSystem.ATTR_VIBRATOR_ON:PhoneSystem.ATTR_VIBRATOR_OFF);
             }
+            // Stop repainting so the next vibration must travel independently of the painter.
+            if(key==Display.KEY_SOFT2)painting=!painting;
             if(key==Display.KEY_1)effect.play();
             if(key==Display.KEY_2){adpcm.stop();adpcm.setSound(packed);adpcm.play();}
             if(key==Display.KEY_0){adpcm.stop();adpcm.setSound(nec);adpcm.play();}
@@ -72,6 +74,6 @@ public class TestIappli extends IApplication {
             if(cleared>0){g.setColor(Graphics.getColorOfRGB(255,180,60));g.fillRect(200,10,20,20);}
             g.unlock(true);
         }
-        public void run() {try{while(true){frames++;repaint();Thread.sleep(100);}}catch(Exception e){throw new RuntimeException(e);}}
+        public void run() {try{while(true){if(painting){frames++;repaint();}Thread.sleep(100);}}catch(Exception e){throw new RuntimeException(e);}}
     }
 }

@@ -47,6 +47,10 @@ async function main() {
     assert.equal(await page.evaluate(()=>Boolean(window.iapp)),false,'old JAR must not start');
     await page.unroute('**/__iapp/status');
     console.log('PASS stale local build blocked with rebuild instructions');
+    await page.evaluate(()=>{window.buzzes=[];navigator.vibrate=value=>{window.buzzes.push(value);return true;};});
+    await page.locator('#test-haptics').click();
+    assert.ok((await page.evaluate(()=>buzzes)).some(value=>value>100&&value<=200),'device test works before the JVM starts');
+    assert.match(await page.locator('#haptics-note').textContent(),/実際の振動は検出できません/);
     await boot();
     await page.waitForFunction(()=>window.iapp.audioStats().rms>0.001);
     const initialAudio=await page.evaluate(()=>window.iapp.audioStats());
@@ -168,15 +172,23 @@ async function main() {
     assert.ok(pulses.length>0,'a key press answers with a pulse');
     assert.ok(pulses.every(value=>value>=20),'the pulse is long enough for a motor to answer');
     await page.evaluate(()=>{window.buzzes=[];});
+    await page.locator('#screen').focus();await page.keyboard.press('ArrowUp');
+    assert.ok((await page.evaluate(()=>buzzes)).some(value=>value>0&&value<=25),'keyboard input also gives a pulse');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('x');await page.waitForTimeout(350);
+    const stoppedFrames=await page.evaluate(()=>iapp.frames);
+    await page.evaluate(()=>{window.buzzes=[];});
     await page.locator('#screen').focus();await page.keyboard.press('*');
     await page.waitForFunction(()=>buzzes.some(value=>value>=1000));
+    assert.equal(await page.evaluate(()=>iapp.frames),stoppedFrames,'app vibration works while repainting is stopped');
     await page.keyboard.press('*');
     await page.waitForFunction(()=>buzzes.includes(0));
-    console.log('PASS key presses and the application vibrator both reach the device');
+    await page.keyboard.press('x');
+    console.log('PASS keyboard/touch pulses and app vibration without repaint reach the browser API');
     // A pad with a motor of its own should answer alongside the handset.
     await page.evaluate(()=>{
       window.rumbles=[];
-      const pad={index:0,id:'authored pad',mapping:'standard',buttons:[],axes:[],
+      const pad=window.hapticPad={index:0,id:'authored pad',mapping:'standard',buttons:[{pressed:false}],axes:[],
         vibrationActuator:{playEffect:(kind,options)=>{window.rumbles.push([kind,options.duration]);return Promise.resolve();},reset(){}}};
       window.realPads=navigator.getGamepads;navigator.getGamepads=()=>[pad];
     });
@@ -184,6 +196,10 @@ async function main() {
     const rumbles=await page.evaluate(()=>rumbles);
     assert.ok(rumbles.length>0&&rumbles.every(([kind,duration])=>kind==='dual-rumble'&&duration>=20),
       'a connected pad rumbles with the same press');
+    await page.evaluate(()=>{rumbles.length=0;hapticPad.buttons[0].pressed=true;});
+    await page.waitForFunction(()=>rumbles.length>0);
+    await page.evaluate(()=>{hapticPad.buttons[0].pressed=false;});
+    await page.waitForTimeout(50);
     await page.evaluate(()=>{navigator.getGamepads=window.realPads;});
     console.log('PASS a gamepad with a motor rumbles alongside the handset');
     // A locked screen or another tab has to fall silent.

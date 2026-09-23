@@ -12,7 +12,7 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
 - Full upstream notice: `vendor/freej2me-plus-devel/LICENSE`.
 - Vendored files are unmodified. `build.py` generates patches under `build/patched/`.
 - Changes: browser frontend bridge, scratchpad offsets/boundaries and repeated
-  close handling, PhoneSystem attribute validation, image clipping, log capture,
+  close handling, PhoneSystem attribute validation and immediate vibrator callbacks, image clipping, log capture,
   music clock, browser volume/tempo routing, DoJa synchronization callbacks and
   ADAT resource decoding that retains indices for unsupported samples,
   resampled WAVE payload sizes rounded to complete PCM frames, and soft key

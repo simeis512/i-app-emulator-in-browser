@@ -99,6 +99,8 @@ def patched_sources():
             ('if (pos >= data.length) { return; }','if (pos >= len) { return; }'),
         ],
         'com/nttdocomo/ui/PhoneSystem.java': [
+            ('if(attr != DEV_VENDOR && attr != DEV_VENDOR2) { attributes[attr] = value; }',
+             'if(attr != DEV_VENDOR && attr != DEV_VENDOR2) { attributes[attr] = value; }\n        if(attr == DEV_VIBRATOR) p905i.web.BrowserRuntime.setVibrator(value);'),
             ('if (!isValidAttribute(attr, 0))',
              'if (!((attr >= DEV_BACKLIGHT && attr <= DEV_AREAINFO) || attr == DEV_VENDOR || attr == DEV_VENDOR2))'),
         ],

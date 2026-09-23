@@ -23,6 +23,7 @@ public final class BrowserRuntime {
     private static native void vibrate(int on);
     private static String labels = "";
     private static int vibrating = -1;
+    private static boolean browserVibration;
 
     public static synchronized void start(String jar, String jam, String sp, String saves,
             int width, int height, final boolean browser) throws Exception {
@@ -43,6 +44,7 @@ public final class BrowserRuntime {
         Mobile.textEncoding = "Shift_JIS";
         Mobile.sound = false;
         BrowserAudio.enable(browser);
+        browserVibration = browser;
         Mobile.limitFPS = 30;
         Mobile.maskIndex = 0;
         Mobile.minLogLevel = Mobile.LOG_INFO;
@@ -64,7 +66,7 @@ public final class BrowserRuntime {
                 if (browser) {
                     BufferedImage img = platform.getLcdFrontbuffer().getCanvas();
                     present(((DataBufferInt) img.getRaster().getDataBuffer()).getData(), img.getWidth(), img.getHeight());
-                    pushLabels();pushVibrator();
+                    pushLabels();
                 }
             }
         });
@@ -134,14 +136,13 @@ public final class BrowserRuntime {
         labels = current;
         try { softLabels(current.getBytes("UTF-8")); } catch (java.io.UnsupportedEncodingException e) { }
     }
-    /** Upstream only records the vibrator attribute, so report it to the page. */
-    private static void pushVibrator() {
-        int on = com.nttdocomo.ui.PhoneSystem.getAttribute(com.nttdocomo.ui.PhoneSystem.DEV_VIBRATOR);
+    /** Deliver attribute changes directly: a short pulse need not span a repaint. */
+    public static synchronized void setVibrator(int on) {
         if (on == vibrating) return;
         vibrating = on;
         // Report it so a silent device can be told from an application that never asked.
         recordLog("Application vibrator " + (on != 0 ? "on" : "off"));
-        vibrate(on);
+        if (browserVibration) vibrate(on);
     }
     public static synchronized void recordLog(String line) {
         if (events.length() > 60000) events.delete(0,30000);
