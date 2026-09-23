@@ -178,6 +178,10 @@ async function main() {
     const shape=await page.evaluate(()=>{const r=document.querySelector('.numpad button').getBoundingClientRect();
       return {w:r.width,h:r.height};});
     assert.ok(shape.h>shape.w*1.4,'a turned key stands taller than it is wide');
+    const rows=await page.evaluate(()=>{const middle=s=>{const r=document.querySelector(s).getBoundingClientRect();return r.top+r.height/2;};
+      return {dial:middle('.dpad'),soft1:middle('.soft1'),soft2:middle('.soft2'),clear:middle('.clear')};});
+    assert.ok(Math.abs(rows.dial-(rows.soft1+rows.soft2)/2)<2&&Math.abs(rows.dial-rows.clear)<2,
+      'the dial sits level with the middle of the keys beside it');
     assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.numpad button')).gridArea.split(' / ').slice(0,2).join(',')),'3,1');
     await spot(.08,.5);
     assert.deepEqual(await pixel(40,75),[120,210,255,255],'the left of a left-turned dial sends up');
