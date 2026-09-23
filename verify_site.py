@@ -32,6 +32,12 @@ def run(base,sums):
         check(status==206 and len(body)==256,name+' answers a byte range with 206')
         check(status==206 and not headers.get('Content-Encoding'),name+' is served uncompressed')
         check(body[:2]==b'PK',name+' starts with a ZIP signature')
+    for name in ['','app.js','style.css','p905i-runtime.jar']:
+        # A page served fresh beside a stale script or stylesheet is a broken page.
+        status,headers,body=fetch(base+name,{'Range':'bytes=0-63'} if name.endswith('.jar') else None)
+        rule=(headers.get('Cache-Control') or '').lower()
+        check(status in (200,206) and ('no-cache' in rule or 'no-store' in rule or 'max-age=0' in rule),
+              (name or 'index.html')+' is revalidated rather than reused for hours')
     status,headers,body=fetch(base+'source.zip',limit=64*1024*1024)
     check(status==200,'source.zip is downloadable')
     if status==200:

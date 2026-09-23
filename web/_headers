@@ -1,0 +1,5 @@
+# The page and the files it loads must stay in step: a stale script or stylesheet
+# against a fresh page breaks the keypad and leaves native methods unresolved.
+# Names carry no content hash, so everything revalidates; ETags keep that cheap.
+/*
+  Cache-Control: no-cache

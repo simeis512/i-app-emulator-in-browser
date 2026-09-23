@@ -56,6 +56,7 @@ tests/instrument-fixture.mjs
 tests/test_server.py
 tests/test_build.py
 web/index.html
+web/_headers
 web/app.js
 web/loader.mjs
 web/audio.mjs
