@@ -305,6 +305,13 @@ ZIP にはビルドスクリプト・依存ソース・ライセンスを含め�
 **HTTP Range リクエストへの対応は必須です。** CheerpJ は JAR を分割して取得するため、
 Range に対応しないホスト（Python 標準の `http.server` など）では動作しません。
 `.jar` に圧縮を掛けるホストも Range を無効化することがあります。
+**ページと、そのページが読み込むファイルは同じ頻度で再検証されるようにしてください。**
+ファイル名に内容のハッシュを付けていないため、HTML だけが新しく JavaScript や CSS が古いままだと、
+画面が崩れたり実行時にメソッドが見つからなくなったりします。同梱の `web/_headers` は
+Cloudflare Pages 向けの指定です。**CDN やゾーン側の設定がこれを上書きすることがあります**
+（Cloudflare では「Browser Cache TTL」を Respect Existing Headers にするか、
+対象ホスト向けの Cache Rule を用意してください）。
+
 `python verify_site.py <URL>` で、配置したサイトがこれらの条件を満たすか確認できます。
 配布 ZIP の `SHA256SUMS.json` を `--sums` に渡すと、そのビルドが実際に配信されているかも照合します。
 
