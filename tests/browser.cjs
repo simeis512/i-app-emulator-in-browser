@@ -161,6 +161,26 @@ async function main() {
     assert.equal(await page.locator('#soft2').textContent(),'終了');
     await page.locator('#screen').focus();
     console.log('PASS soft key labels appear below the screen and follow the application');
+    // Glass gives nothing back, so a press and an application's own vibration must reach the device.
+    await page.evaluate(()=>{window.buzzes=[];navigator.vibrate=value=>{window.buzzes.push(value);return true;};});
+    await page.locator('.numpad button[data-key="49"]').click();
+    assert.ok((await page.evaluate(()=>buzzes)).length>0,'a key press answers with a short pulse');
+    await page.evaluate(()=>{window.buzzes=[];});
+    await page.locator('#screen').focus();await page.keyboard.press('*');
+    await page.waitForFunction(()=>buzzes.some(value=>value>=1000));
+    await page.keyboard.press('*');
+    await page.waitForFunction(()=>buzzes.includes(0));
+    console.log('PASS key presses and the application vibrator both reach the device');
+    // A locked screen or another tab has to fall silent.
+    await page.waitForFunction(()=>iapp.audioStats().rms>.001);
+    await page.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true});
+      document.dispatchEvent(new Event('visibilitychange'));});
+    // A suspended context produces nothing; its analyser still holds the last buffer it saw.
+    await page.waitForFunction(()=>iapp.audioStats().state==='suspended');
+    await page.evaluate(()=>{Object.defineProperty(document,'hidden',{value:false,configurable:true});
+      document.dispatchEvent(new Event('visibilitychange'));});
+    await page.waitForFunction(()=>iapp.audioStats().state==='running'&&iapp.audioStats().rms>.001);
+    console.log('PASS audio stops while the page is hidden and returns with it');
     // Turning the handset carried the dial with it, so the same spot sends a rotated direction.
     async function spot(fx,fy) {
       const ring=await page.locator('#dpad').boundingBox();
@@ -295,6 +315,17 @@ async function main() {
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);
     assert.deepEqual(errors,[]);
+    // A folding phone opened out is wide, but still a touch device needing the play layout.
+    const wide=await browser.newContext({viewport:{width:1000,height:700},hasTouch:true,isMobile:true});
+    const folded=await wide.newPage();
+    await folded.goto(baseURL);
+    await folded.locator('#files').setInputFiles(['jar','jam','sp'].map(ext=>path.join(root,'build/fixture/fixture.'+ext)));
+    await folded.locator('#start').click();
+    await folded.waitForFunction(()=>window.iapp?.frames>=5,null,{timeout:180000});
+    await folded.waitForFunction(()=>document.body.classList.contains('playing'));
+    assert.ok(await folded.locator('#full-screen').isVisible(),'the whole screen is offered where bars steal room');
+    await wide.close();
+    console.log('PASS a wide touch screen still gets the play layout');
     console.log('ALL BROWSER CHECKS PASSED');
   } finally { await browser.close(); }
 }

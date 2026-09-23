@@ -33,7 +33,7 @@ public class TestIappli extends IApplication {
             try(DataOutputStream out=Connector.openDataOutputStream("scratchpad:///0;pos=0,length=4")){out.writeInt(x);}
             catch(Exception e){throw new RuntimeException(e);}
         }
-        int cleared; boolean clearDown;
+        int cleared; boolean clearDown, buzzing;
         public void processEvent(int type,int key) {
             // CLEAR bypasses the keypad state, so count a release only after its own press.
             if(key==Display.KEY_CLEAR) {
@@ -47,6 +47,11 @@ public class TestIappli extends IApplication {
             if(key==Display.KEY_UP)y=Math.max(30,y-20);
             if(key==Display.KEY_DOWN)y=Math.min(200,y+20);
             if(key==Display.KEY_POUND)setSoftLabel(SOFT_KEY_1,"もどる");
+            if(key==Display.KEY_ASTERISK) {
+                buzzing=!buzzing;
+                PhoneSystem.setAttribute(PhoneSystem.DEV_VIBRATOR,
+                    buzzing?PhoneSystem.ATTR_VIBRATOR_ON:PhoneSystem.ATTR_VIBRATOR_OFF);
+            }
             if(key==Display.KEY_1)effect.play();
             if(key==Display.KEY_2){adpcm.stop();adpcm.setSound(packed);adpcm.play();}
             if(key==Display.KEY_0){adpcm.stop();adpcm.setSound(nec);adpcm.play();}

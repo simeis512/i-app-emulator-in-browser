@@ -7,7 +7,8 @@
 .pad-controls{margin-top:12px;padding-top:10px}.pad-controls button{margin:10px 6px 0 0;font-size:12px}.pad-controls .note{margin:6px 0 0}
 .stage{min-width:0}canvas{touch-action:none}
 /* Play mode keeps the screen and the keypad on one screenful, so a phone needs no scrolling. */
-#leave-play{position:fixed;top:8px;right:8px;z-index:9;font-size:12px;padding:7px 11px;opacity:.9}
+#play-tools{position:fixed;top:8px;right:8px;z-index:9;display:flex;gap:6px}
+#play-tools button{font-size:12px;padding:7px 11px;opacity:.9}
 @media(max-width:750px),(max-height:560px){
 body.playing{overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
 body.playing main{padding:0;height:100dvh;display:flex;flex-direction:column}
@@ -16,7 +17,7 @@ body.playing .workspace{flex:1;min-height:0;gap:0}
 body.playing .viewer{flex:1;min-height:0;display:flex}
 body.playing .viewer>.note,body.playing .viewer>details{display:none}
 body.playing .device{flex:1;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
-body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:58px}
+body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:126px}
 body.playing .device-footer{display:none}
 body.playing .stage{flex:1;min-height:0;container-type:size;display:flex;flex-direction:column;justify-content:center}
 body.playing canvas{width:min(100cqw,calc((100cqh - 30px)*var(--aspect,1)));height:auto;align-self:center}

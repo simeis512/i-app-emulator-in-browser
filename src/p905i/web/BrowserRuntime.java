@@ -20,7 +20,9 @@ public final class BrowserRuntime {
     public static final int CLEAR = -8;
     private static native void present(int[] argb, int width, int height);
     private static native void softLabels(byte[] utf8);
+    private static native void vibrate(int on);
     private static String labels = "";
+    private static int vibrating = -1;
 
     public static synchronized void start(String jar, String jam, String sp, String saves,
             int width, int height, final boolean browser) throws Exception {
@@ -62,7 +64,7 @@ public final class BrowserRuntime {
                 if (browser) {
                     BufferedImage img = platform.getLcdFrontbuffer().getCanvas();
                     present(((DataBufferInt) img.getRaster().getDataBuffer()).getData(), img.getWidth(), img.getHeight());
-                    pushLabels();
+                    pushLabels();pushVibrator();
                 }
             }
         });
@@ -131,6 +133,13 @@ public final class BrowserRuntime {
         if (current.equals(labels)) return;
         labels = current;
         try { softLabels(current.getBytes("UTF-8")); } catch (java.io.UnsupportedEncodingException e) { }
+    }
+    /** Upstream only records the vibrator attribute, so report it to the page. */
+    private static void pushVibrator() {
+        int on = com.nttdocomo.ui.PhoneSystem.getAttribute(com.nttdocomo.ui.PhoneSystem.DEV_VIBRATOR);
+        if (on == vibrating) return;
+        vibrating = on;
+        vibrate(on);
     }
     public static synchronized void recordLog(String line) {
         if (events.length() > 60000) events.delete(0,30000);

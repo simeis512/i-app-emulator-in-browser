@@ -290,6 +290,7 @@ export class BrowserAudio {
       }
     }
   }
+  async suspend(){try{await this.context.suspend();}catch{}}
   close(id){const player=this.players.get(id);if(player){this.clearSound(player);this.players.delete(id);}}
   stopAll(){for(const player of this.players.values()){player.running=false;this.clearSound(player);}}
   stats(){

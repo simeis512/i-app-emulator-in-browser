@@ -57,13 +57,36 @@ function chooseSize() {
 }
 // Play mode sizes the canvas from the free area, so the keypad stays on screen.
 function fitScreen(){canvas.style.setProperty('--aspect',canvas.width/canvas.height);}
-const PHONE='(max-width:750px),(max-height:560px)';
+const PHONE='(pointer:coarse),(max-width:750px),(max-height:560px)';
 const narrow=()=>matchMedia(PHONE).matches;
 function setPlaying(on) {
   document.body.classList.toggle('playing',on&&narrow());
-  $('leave-play').textContent=on?'設定':'画面に戻る';$('leave-play').hidden=!booted||!narrow();
+  $('leave-play').textContent=on?'設定':'画面に戻る';$('play-tools').hidden=!booted||!narrow();
 }
 $('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
+// A browser's own bars leave little room sideways, so offer the whole screen.
+$('full-screen').hidden=!document.documentElement.requestFullscreen;
+$('full-screen').onclick=async()=>{
+  try {
+    if(document.fullscreenElement)await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen({navigationUI:'hide'});
+  }catch(error){status('全画面にできません: '+(error.message||error),true);}
+};
+document.addEventListener('fullscreenchange',()=>{$('full-screen').textContent=document.fullscreenElement?'全画面解除':'全画面';});
+// Keys on glass give nothing back, so answer a press the way the handset did.
+const canBuzz=typeof navigator.vibrate==='function';
+let appBuzz=0;
+if(!canBuzz){$('haptics').checked=false;$('haptics').disabled=true;$('haptics-note').textContent='この端末・ブラウザは振動に対応していません。';}
+function buzz(milliseconds){
+  if(!canBuzz||!$('haptics').checked)return;
+  try{navigator.vibrate(milliseconds);}catch{}
+}
+function appVibrate(on) {
+  clearInterval(appBuzz);appBuzz=0;
+  if(!on||!canBuzz||!$('haptics').checked){if(canBuzz)try{navigator.vibrate(0);}catch{}return;}
+  buzz(1500);appBuzz=setInterval(()=>buzz(1500),1400);
+}
+$('haptics').onchange=()=>{if(!$('haptics').checked)appVibrate(0);};
 matchMedia(PHONE).addEventListener('change',()=>setPlaying(booted));
 chooseSize(); $('size').onchange=chooseSize;
 function selectFiles(incoming) {
@@ -123,6 +146,7 @@ async function start() {
       async Java_p905i_web_BrowserAudio_sampleNative(lib,id,index,bytes){audio?.sample(id,index,bytes);},
       async Java_p905i_web_BrowserAudio_controlNative(lib,id,command,position,rate,volume){audio?.control(id,command,position,rate,volume);},
       async Java_p905i_web_BrowserAudio_syncNative(lib,id,channel,key){audio?.sync(id,channel,key);},
+      async Java_p905i_web_BrowserRuntime_vibrate(lib,on){appVibrate(on);},
       async Java_p905i_web_BrowserRuntime_softLabels(lib,utf8) {
         const [left='',right='']=new TextDecoder().decode(Uint8Array.from(utf8)).split(String.fromCharCode(10));
         $('soft1').textContent=left;$('soft2').textContent=right;
@@ -193,7 +217,7 @@ function key(source,code,down) {
 }
 for(const button of document.querySelectorAll('[data-key]')) {
   const code=Number(button.dataset.key);
-  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);key('pointer:'+e.pointerId,code,true);};
+  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);buzz(8);key('pointer:'+e.pointerId,code,true);};
   button.onpointerup=button.onpointercancel=button.onlostpointercapture=e=>key('pointer:'+e.pointerId,code,false);
 }
 // A handset dial is a ring: the outer band sends a direction and a diagonal sends two.
@@ -242,8 +266,10 @@ function dpadSet(pointer,codes) {
     if(held!==undefined&&held!==wanted)key(source,held,false);
     if(wanted!==undefined&&held!==wanted)key(source,wanted,true);
   }
-  dpadShow(codes);
+  if(codes.length&&String(codes)!==dpadLast)buzz(8);
+  dpadLast=String(codes);dpadShow(codes);
 }
+let dpadLast='';
 dpad.onpointerdown=e=>{
   if(e.target.closest('button'))return;
   e.preventDefault();dpad.setPointerCapture(e.pointerId);dpadSet(e.pointerId,dpadAim(e));
@@ -261,7 +287,11 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('keyup',e=>key('keyboard:'+e.code,keycode(e),false));
 function release(){for(const [source,code] of [...sources])key(source,code,false);padRelease();dpadShow([]);}
-window.addEventListener('blur',release);document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
+window.addEventListener('blur',release);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){release();appVibrate(0);audio?.suspend();}
+  else if($('sound').checked)audio?.resume();
+});
 
 // Gamepads feed the same key() path as touch and keyboard, so a held key stays consistent.
 const PAD_DEFAULT={0:-5,1:CLEAR,2:-6,3:-7,4:42,5:35,8:49,9:51,12:-1,13:-2,14:-3,15:-4};
