@@ -8,25 +8,31 @@
 .stage{min-width:0}canvas{touch-action:none}
 /* Play mode keeps the screen and the keypad on one screenful, so a phone needs no scrolling. */
 #play-tools{position:fixed;top:8px;right:8px;z-index:9;display:flex;gap:6px}
-#play-tools button{font-size:12px;padding:7px 11px;opacity:.9}
-@media(max-width:750px),(max-height:560px){
+#play-tools button{font-size:12px;padding:6px 8px;opacity:.9;min-width:74px}
+body.playing.no-keypad .controls{display:none}
+/* Play mode is a class, not a screen size, so any device can switch into it. */
 body.playing{overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
-body.playing main{padding:0;height:100dvh;display:flex;flex-direction:column}
+body.playing main{padding:0;height:100dvh;max-width:none;display:flex;flex-direction:column}
 body.playing header,body.playing footer{display:none}
-body.playing .workspace{flex:1;min-height:0;gap:0}
-body.playing .viewer{flex:1;min-height:0;display:flex}
+body.playing .workspace{display:flex;flex-direction:column;flex:1;min-height:0;gap:0}
+body.playing .viewer{order:-1;flex:1 1 0;min-height:0;display:flex}
 body.playing .viewer>.note,body.playing .viewer>details{display:none}
-body.playing .device{flex:1;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
-body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:126px}
+body.playing .device{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
+body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:246px;min-height:30px;overflow:hidden}
+body.playing .device-label span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.playing #resolution{display:none}
 body.playing .device-footer{display:none}
 body.playing .stage{flex:1;min-height:0;container-type:size;display:flex;flex-direction:column;justify-content:center}
 body.playing canvas{width:min(100cqw,calc((100cqh - 30px)*var(--aspect,1)));height:auto;align-self:center}
-body.playing .controls{display:block;padding:0 6px 6px}
+body.playing .controls{display:block;flex:0 0 auto;padding:0 6px 6px}
 body.playing .controls>*{display:none}
-body.playing .controls>.keypad{display:grid;margin:0;max-width:none;gap:4px}
-body.playing .keypad button{min-height:34px;padding:3px;font-size:12px;line-height:1.25}
+body.playing .controls>.keypad{display:flex;margin:0;max-width:none;gap:min(4px,.6vh)}
+body.playing .keypad button{min-height:min(34px,5vh);padding:2px;font-size:12px;line-height:1.2}
 body.playing .keypad small{display:none}
-}
+body.playing .dpad{--dial:min(112px,15vh)}
+body.playing .soft-labels{margin:6px 0 0;font-size:11px;min-height:0}
+body.playing .keypad .center{font-size:11px}
+body.playing .numpad,body.playing .dpad-row{gap:min(4px,.6vh)}
 
 /* A handset dial is a ring, so the outer band sends a direction and a diagonal sends two. */
 .keypad{display:flex;flex-direction:column;gap:6px}
@@ -46,16 +52,10 @@ background:#202b3c;border:1px solid #3d4c64;display:grid;place-items:center;touc
 border:1px solid #33425a;border-radius:7px;background:#141d2a;font-size:12px;color:#c6d9ec;min-height:29px}
 .soft-labels span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #soft2{text-align:right}
-@media(max-width:750px),(max-height:560px){
-body.playing .dpad{--dial:112px}
-body.playing .controls>.keypad{display:flex}
-body.playing .soft-labels{margin:6px 0 0;font-size:11px;min-height:0}
-body.playing .keypad .center{font-size:11px}
-}
 
 /* Turned sideways there is no room to stack, so the keypad moves beside the screen. */
-@media(max-height:560px) and (orientation:landscape){
-body.playing .workspace{display:flex;flex-direction:row;gap:6px}
+@media(orientation:landscape){
+body.playing .workspace{flex-direction:row;gap:6px}
 body.playing .viewer{flex:1;min-width:0}
 body.playing .controls{flex:0 0 auto;width:min(46vw,320px);padding:6px 6px 6px 0;overflow-y:auto}
 body.playing .device{padding:6px 0 0 6px}
@@ -87,7 +87,7 @@ body.playing .numpad{gap:3px}
 .keypad.turn-left .numpad button,.keypad.turn-right .numpad button{min-height:var(--key-h);padding:0}
 .keypad.turn-left .dpad-row>button,.keypad.turn-right .dpad-row>button{width:var(--key-w);min-height:var(--key-h);padding:0;justify-self:center}
 /* Turned and sideways the handset is held like a pad, so the keys take both bottom corners. */
-@media(max-height:560px) and (orientation:landscape){
+@media(orientation:landscape){
 body.playing.turn-left .controls,body.playing.turn-right .controls{width:0;padding:0;overflow:visible}
 body.playing.turn-left .viewer,body.playing.turn-right .viewer{padding:0 190px}
 body.playing.turn-left .dpad-row,body.playing.turn-right .numpad{left:6px}

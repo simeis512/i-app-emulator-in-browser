@@ -181,8 +181,30 @@ async function main() {
       document.dispatchEvent(new Event('visibilitychange'));});
     await page.waitForFunction(()=>iapp.audioStats().state==='running'&&iapp.audioStats().rms>.001);
     console.log('PASS audio stops while the page is hidden and returns with it');
+    // Which layout suits a device is its owner's call, so the switch works anywhere.
+    assert.ok(await page.locator('#play-tools').isVisible(),'the switch is offered on a desktop too');
+    const sizes={settings:await page.evaluate(()=>document.querySelector('#screen').getBoundingClientRect().width)};
+    await page.locator('#leave-play').click();
+    await page.waitForFunction(()=>document.body.classList.contains('playing'));
+    assert.ok(!await page.locator('#start').isVisible(),'play mode puts the settings away');
+    sizes.played=await page.evaluate(()=>document.querySelector('#screen').getBoundingClientRect().width);
+    sizes.viewer=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().width);
+    assert.ok(sizes.played>sizes.settings,'the screen grows in play mode');
+    await page.locator('#show-keypad').click();
+    await page.waitForFunction(()=>document.body.classList.contains('no-keypad'));
+    assert.ok(!await page.locator('.keypad').isVisible(),'a keyboard or pad makes the keys optional');
+    // Sideways the keys stand beside the screen, so what they free is width for the viewer.
+    sizes.bare=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().width);
+    assert.ok(sizes.bare>sizes.viewer,'the screen area takes the room the keys leave');
+    await page.locator('#show-keypad').click();
+    await page.waitForFunction(()=>!document.body.classList.contains('no-keypad'));
+    await page.locator('#leave-play').click();
+    await page.waitForFunction(()=>!document.body.classList.contains('playing'));
+    await page.locator('#screen').focus();
+    console.log('PASS play mode and the on-screen keys switch on any device');
     // Turning the handset carried the dial with it, so the same spot sends a rotated direction.
     async function spot(fx,fy) {
+      await page.locator('#dpad').scrollIntoViewIfNeeded();
       const ring=await page.locator('#dpad').boundingBox();
       await page.mouse.move(ring.x+ring.width*fx,ring.y+ring.height*fy);
       await page.mouse.down();await page.waitForTimeout(120);await page.mouse.up();
@@ -237,6 +259,7 @@ async function main() {
     assert.ok(layout.width>=240,'the screen is scaled up to the available width');
     assert.ok(layout.scroll<=layout.inner+1,'play mode does not scroll the page');
     // A handset dial is a ring, so a diagonal has to send both directions at once.
+    await page.locator('#dpad').scrollIntoViewIfNeeded();
     const dial=await page.locator('#dpad').boundingBox();
     const centre=[dial.x+dial.width/2,dial.y+dial.height/2],reach=dial.width*.4;
     async function press(dx,dy) {

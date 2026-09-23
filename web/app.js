@@ -59,11 +59,23 @@ function chooseSize() {
 function fitScreen(){canvas.style.setProperty('--aspect',canvas.width/canvas.height);}
 const PHONE='(pointer:coarse),(max-width:750px),(max-height:560px)';
 const narrow=()=>matchMedia(PHONE).matches;
+// Which layout suits a device is its owner's call, so the switch is always there.
 function setPlaying(on) {
-  document.body.classList.toggle('playing',on&&narrow());
-  $('leave-play').textContent=on?'設定':'画面に戻る';$('play-tools').hidden=!booted||!narrow();
+  document.body.classList.toggle('playing',on);
+  $('leave-play').textContent=on?'設定':'プレイ画面';
+  $('play-tools').hidden=!booted;$('show-keypad').hidden=!on;
 }
 $('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
+// A keyboard or a gamepad makes the on-screen keys dead weight, so they can go.
+let keypadOff=false;
+try{keypadOff=localStorage.getItem('keypadOff')==='1';}catch{}
+function setKeypad(shown) {
+  keypadOff=!shown;document.body.classList.toggle('no-keypad',keypadOff);
+  $('show-keypad').textContent=keypadOff?'キー表示':'キー非表示';
+  try{localStorage.setItem('keypadOff',keypadOff?'1':'0');}catch{}
+}
+$('show-keypad').onclick=()=>{release();setKeypad(keypadOff);};
+setKeypad(!keypadOff);
 // A browser's own bars leave little room sideways, so offer the whole screen.
 $('full-screen').hidden=!document.documentElement.requestFullscreen;
 $('full-screen').onclick=async()=>{
@@ -87,7 +99,7 @@ function appVibrate(on) {
   buzz(1500);appBuzz=setInterval(()=>buzz(1500),1400);
 }
 $('haptics').onchange=()=>{if(!$('haptics').checked)appVibrate(0);};
-matchMedia(PHONE).addEventListener('change',()=>setPlaying(booted));
+matchMedia(PHONE).addEventListener('change',event=>{if(event.matches&&booted)setPlaying(true);});
 chooseSize(); $('size').onchange=chooseSize;
 function selectFiles(incoming) {
   if(booted || preparing) return;
@@ -192,7 +204,7 @@ async function start() {
         fpsFrames=frames;fpsTime=now;
       }catch(error){status(String(error),true);}finally{polling=false;}
     },1000);
-    setPlaying(true);canvas.focus();
+    setPlaying(narrow());canvas.focus();
   }catch(error) {
     status(error.message||String(error),true);console.error(error);
     $('start').textContent=booted?'再読み込み':'起動する';$('start').disabled=false;
