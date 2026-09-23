@@ -88,14 +88,19 @@ function fitKeypad() {
   }
   // Keep the handset's own stacking while it stays comfortable, and only fall back
   // to the two halves side by side when a wide, short band would leave it tiny.
+  // clientWidth and clientHeight include the padding, which would scale the keys past
+  // the band and let the edges be clipped, so measure the content box itself.
+  const box=getComputedStyle(padArea);
+  const room=[padArea.clientWidth-parseFloat(box.paddingLeft)-parseFloat(box.paddingRight),
+              padArea.clientHeight-parseFloat(box.paddingTop)-parseFloat(box.paddingBottom)];
   const fit=wide=>{
     padKeys.classList.toggle('wide',wide);
     const width=padKeys.offsetWidth,height=padKeys.offsetHeight;
-    return width&&height?Math.min(padArea.clientWidth/width,padArea.clientHeight/height):0;
+    return width&&height?Math.min(room[0]/width,room[1]/height):0;
   };
   const stacked=fit(false),side=fit(true);
   // Leave a gap between the two thresholds so dragging the bar cannot flip it back and forth.
-  const wide=side>stacked&&stacked<(padKeys.dataset.wide?.9:.8);
+  const wide=side>stacked&&stacked<(padKeys.dataset.wide?.7:.6);
   padKeys.classList.toggle('wide',wide);
   if(wide)padKeys.dataset.wide='1';else delete padKeys.dataset.wide;
   const scale=wide?side:stacked;

@@ -307,6 +307,12 @@ async function main() {
     assert.ok(after.screen<before.screen-60,'dragging the bar up hands height to the keys');
     assert.ok(after.keys>before.keys+60,'the keys band takes it');
     assert.ok(after.scale>before.scale,'the keys grow into the room without changing shape');
+    // Scaled keys that outgrow their band get their edges clipped away, so check they fit.
+    const held=await page.evaluate(()=>{const keys=document.querySelector('.keypad').getBoundingClientRect(),
+      band=document.querySelector('.controls').getBoundingClientRect();
+      return {top:keys.top-band.top,bottom:band.bottom-keys.bottom,left:keys.left-band.left,right:band.right-keys.right};});
+    assert.ok(held.top>=-.5&&held.bottom>=-.5&&held.left>=-.5&&held.right>=-.5,
+      'the keys stay inside their band rather than being clipped');
     await page.locator('#split').focus();
     await page.keyboard.press('ArrowDown');await page.waitForTimeout(150);
     assert.ok((await band()).screen>after.screen,'arrow keys move the bar too');
