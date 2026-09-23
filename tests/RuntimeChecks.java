@@ -62,6 +62,31 @@ public final class RuntimeChecks {
             int painted=0;for(int pixel:target.getDataBuffer())if(pixel==0xffff0000)painted++;
             require(painted==4 && target.getDataBuffer()[5]==0xffff0000,"scaled source clipping preserves valid pixels");
 
+            // DoJa clips follow setOrigin; only clearClip names the whole surface.
+            PlatformImage clipped=new PlatformImage(40,40);com.nttdocomo.ui.Graphics clip=clipped.getDoJaGraphics();
+            clip.setOrigin(20,20);clip.setClip(2,2,6,6);clip.setColor(com.nttdocomo.ui.Graphics.getColorOfRGB(0,255,0));
+            clip.fillRect(-20,-20,80,80);
+            int[] pixels=clipped.getDataBuffer();int green=pixels[24*40+24];
+            require((green&0xffffff)==0x00ff00,"a clip set after setOrigin lies inside the moved origin");
+            require(pixels[4*40+4]!=green && pixels[30*40+30]!=green,"nothing is drawn outside that clip");
+            clip.clearClip();clip.fillRect(-20,-20,4,4);
+            require(clipped.getDataBuffer()[1*40+1]==green,"clearClip opens the whole surface whatever the origin");
+
+            // Applications size their text by asking for TINY to LARGE, so each must differ.
+            com.nttdocomo.ui.Font tiny=com.nttdocomo.ui.Font.getFont(com.nttdocomo.ui.Font.SIZE_TINY);
+            com.nttdocomo.ui.Font large=com.nttdocomo.ui.Font.getFont(com.nttdocomo.ui.Font.FACE_SYSTEM|
+                com.nttdocomo.ui.Font.STYLE_PLAIN|com.nttdocomo.ui.Font.SIZE_LARGE);
+            require(tiny.getHeight()<large.getHeight() && tiny.stringWidth("あいう")<large.stringWidth("あいう"),
+                "a requested font size is honoured rather than replaced by the default");
+            require(com.nttdocomo.ui.Font.getFont(com.nttdocomo.ui.Font.SIZE_TINY)==tiny,"a repeated request reuses the font");
+            // Handsets drew bitmap text: every pixel is either the ink or what was underneath.
+            PlatformImage text=new PlatformImage(80,24);com.nttdocomo.ui.Graphics ink=text.getDoJaGraphics();
+            ink.setColor(com.nttdocomo.ui.Graphics.getColorOfRGB(0,0,0));ink.fillRect(0,0,80,24);
+            ink.setColor(com.nttdocomo.ui.Graphics.getColorOfRGB(255,255,255));ink.setFont(large);ink.drawString("あ木Ag",2,20);
+            int inked=0,blended=0;
+            for(int pixel:text.getDataBuffer()){int value=pixel&0xffffff;if(value==0xffffff)inked++;else if(value!=0)blended++;}
+            require(inked>0 && blended==0,"text is drawn without antialiasing, as on the handset");
+
             Sequence seq=new Sequence(Sequence.PPQ,100);Track track=seq.createTrack();
             ShortMessage note=new ShortMessage();note.setMessage(ShortMessage.NOTE_ON,0,21,100);track.add(new MidiEvent(note,10));
             MetaMessage end=new MetaMessage();end.setMessage(0x2f,new byte[0],0);track.add(new MidiEvent(end,30));

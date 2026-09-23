@@ -93,6 +93,20 @@ def patched_sources():
              '''// Clip portions outside the source image, as Graphics2D does.
                     if (imgX >= 0 && imgX < imgWidth && imgY >= 0 && imgY < image.getHeight())
                         canvasData[destRow + x] = blendPixels(imgData[imgY * imgWidth + imgX], canvasData[destRow + x]);'''),
+            # Handsets drew bitmap text. Antialiasing turns the common outline trick (the
+            # string in black at eight offsets, then white on top) into an unreadable smear.
+            ('gc.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);',
+             'gc.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,\n\t\t\tMobile.isDoJa ? RenderingHints.VALUE_TEXT_ANTIALIAS_OFF : RenderingHints.VALUE_TEXT_ANTIALIAS_ON);'),
+            # DoJa clips are relative to setOrigin, like every other drawing call; only
+            # clearClip names the whole surface. Upstream made setClip absolute instead.
+            ('else { gc.setClip(x-getTranslateX(), y-getTranslateY(), width, height); }',
+             'else { gc.setClip(x, y, width, height); }'),
+            ('public void clearClip()',
+             'public void clearClip() { if(contextDisposed) { throw new UIException(UIException.ILLEGAL_STATE, "This graphics context has been disposed"); } gc.setClip(-translateX, -translateY, canvasWidth, canvasHeight); }\n\tprivate void clearClipFromTranslatedOrigin()'),
+        ],
+        'com/nttdocomo/ui/Font.java': [
+            ('public static Font getFont(int type) { return getDefaultFont(); }',
+             'public static Font getFont(int type)\n\t{\n\t\t// Decode face, style and size as openDoJa does; upstream returned one default for all.\n\t\tif (type == TYPE_DEFAULT) { return getDefaultFont(); }\n\t\tif (type == TYPE_HEADING) { type = FACE_SYSTEM | STYLE_BOLD | SIZE_LARGE; }\n\t\tint face = type & 0x7F000000, styleBits = type & 0x00FF0000, size = 0x70000000 | (type & 0x0000FF00);\n\t\tif (face != FACE_MONOSPACE && face != FACE_PROPORTIONAL) { face = FACE_SYSTEM; }\n\t\tint style = styleBits == 0x00110000 ? STYLE_BOLD : styleBits == 0x00120000 ? STYLE_ITALIC\n\t\t\t: styleBits == 0x00130000 ? STYLE_BOLDITALIC : STYLE_PLAIN;\n\t\tif (size != SIZE_TINY && size != SIZE_SMALL && size != SIZE_MEDIUM && size != SIZE_LARGE) { size = getDefaultFont().getSize(); }\n\t\t// Some applications ask for their font on every frame, so keep one object per request.\n\t\tInteger key = Integer.valueOf(face | style | size);\n\t\tsynchronized (requestedFonts)\n\t\t{\n\t\t\tFont font = requestedFonts.get(key);\n\t\t\tif (font == null) { font = new Font(face, style, size); requestedFonts.put(key, font); }\n\t\t\treturn font;\n\t\t}\n\t}\n\tprivate static final java.util.HashMap<Integer, Font> requestedFonts = new java.util.HashMap<Integer, Font>();'),
         ],
         'com/nttdocomo/util/ScratchPadOutputStream.java': [
             ('public void close() throws IOException \n    {', 'public void close() throws IOException \n    {\n        if (data == null) return;'),

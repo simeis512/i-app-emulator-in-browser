@@ -15,8 +15,10 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
   close handling, PhoneSystem attribute validation and immediate vibrator callbacks, image clipping, log capture,
   music clock, browser volume/tempo routing, DoJa synchronization callbacks and
   ADAT resource decoding that retains indices for unsupported samples,
-  resampled WAVE payload sizes rounded to complete PCM frames, and soft key
-  labels reported to the browser frontend rather than drawn over the canvas.
+  resampled WAVE payload sizes rounded to complete PCM frames, soft key
+  labels reported to the browser frontend rather than drawn over the canvas,
+  DoJa clip rectangles measured from the current origin, requested DoJa font
+  sizes honoured, and DoJa text drawn without antialiasing.
 
 Separately licensed components retained from that snapshot:
 
