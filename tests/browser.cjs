@@ -183,19 +183,18 @@ async function main() {
     console.log('PASS audio stops while the page is hidden and returns with it');
     // Which layout suits a device is its owner's call, so the switch works anywhere.
     assert.ok(await page.locator('#play-tools').isVisible(),'the switch is offered on a desktop too');
-    const sizes={settings:await page.evaluate(()=>document.querySelector('#screen').getBoundingClientRect().width)};
+    const sizes={};
     await page.locator('#leave-play').click();
     await page.waitForFunction(()=>document.body.classList.contains('playing'));
     assert.ok(!await page.locator('#start').isVisible(),'play mode puts the settings away');
-    sizes.played=await page.evaluate(()=>document.querySelector('#screen').getBoundingClientRect().width);
-    sizes.viewer=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().width);
-    assert.ok(sizes.played>sizes.settings,'the screen grows in play mode');
+    sizes.viewer=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().height);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1),
+      'play mode fits the whole window');
     await page.locator('#show-keypad').click();
     await page.waitForFunction(()=>document.body.classList.contains('no-keypad'));
     assert.ok(!await page.locator('.keypad').isVisible(),'a keyboard or pad makes the keys optional');
-    // Sideways the keys stand beside the screen, so what they free is width for the viewer.
-    sizes.bare=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().width);
-    assert.ok(sizes.bare>sizes.viewer,'the screen area takes the room the keys leave');
+    sizes.bare=await page.evaluate(()=>document.querySelector('.viewer').getBoundingClientRect().height);
+    assert.ok(sizes.bare>sizes.viewer,'the screen area takes the height the keys leave');
     await page.locator('#show-keypad').click();
     await page.waitForFunction(()=>!document.body.classList.contains('no-keypad'));
     await page.locator('#leave-play').click();
@@ -293,24 +292,26 @@ async function main() {
       inner:innerHeight,scroll:document.documentElement.scrollHeight}));
     assert.ok(turned.playing,'a sideways phone stays in play mode');
     assert.ok(turned.padBottom<=turned.inner+1&&turned.scroll<=turned.inner+1,'sideways still needs no scrolling');
-    // Turned and sideways the two halves take a bottom corner each, with the screen between them.
-    await page.evaluate(()=>{document.querySelector('#keypad-turn').value='-1';
-      document.querySelector('#keypad-turn').dispatchEvent(new Event('change'));});
-    await page.waitForTimeout(300);
-    const grip=await page.evaluate(()=>{
-      const box=s=>document.querySelector(s).getBoundingClientRect();
-      const dial=box('.dpad-row'),numbers=box('.numpad'),screen=box('#screen');
-      return {dialLeft:dial.left,dialBottom:dial.bottom,numRight:numbers.right,numBottom:numbers.bottom,
-        screenLeft:screen.left,screenRight:screen.right,screenWidth:screen.width,
-        inner:innerHeight,width:innerWidth,scroll:document.documentElement.scrollHeight};
-    });
-    assert.ok(grip.dialLeft<20&&grip.numRight>grip.width-20,'the halves sit at opposite edges');
-    assert.ok(grip.dialBottom>grip.inner-20&&grip.numBottom>grip.inner-20,'both halves sit at the bottom');
-    assert.ok(grip.screenLeft>grip.dialLeft+100&&grip.screenRight<grip.numRight-100,'the screen sits between them');
-    assert.ok(grip.screenWidth>300&&grip.scroll<=grip.inner+1,'the screen still fills the middle without scrolling');
-    await page.evaluate(()=>{document.querySelector('#keypad-turn').value='0';
-      document.querySelector('#keypad-turn').dispatchEvent(new Event('change'));});
-    console.log('PASS turned and sideways, the keypad splits to both bottom corners');
+    // The bar between the two bands sets their share, and the keys fill whatever they get.
+    const band=()=>page.evaluate(()=>({screen:document.querySelector('.viewer').getBoundingClientRect().height,
+      keys:document.querySelector('.controls').getBoundingClientRect().height,
+      scale:Number(getComputedStyle(document.querySelector('.keypad')).transform.split('(')[1].split(',')[0])}));
+    const before=await band();
+    const bar=await page.locator('#split').boundingBox();
+    await page.mouse.move(bar.x+bar.width/2,bar.y+bar.height/2);
+    await page.mouse.down();
+    await page.mouse.move(bar.x+bar.width/2,bar.y+bar.height/2-140,{steps:6});
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    const after=await band();
+    assert.ok(after.screen<before.screen-60,'dragging the bar up hands height to the keys');
+    assert.ok(after.keys>before.keys+60,'the keys band takes it');
+    assert.ok(after.scale>before.scale,'the keys grow into the room without changing shape');
+    await page.locator('#split').focus();
+    await page.keyboard.press('ArrowDown');await page.waitForTimeout(150);
+    assert.ok((await band()).screen>after.screen,'arrow keys move the bar too');
+    await page.locator('#screen').focus();
+    console.log('PASS the divider shares the height and the keys scale to fill theirs');
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(()=>document.body.classList.contains('playing'));
     console.log('PASS play mode keeps screen and keypad visible upright and sideways');

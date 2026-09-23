@@ -5,7 +5,7 @@
 <body><div id="play-tools" hidden><button id="full-screen" type="button">全画面</button><button id="show-keypad" type="button" hidden>キー非表示</button><button id="leave-play" type="button">設定</button></div><main>
 <header><div class="eyebrow">i-APPLI / BROWSER EMULATOR</div><h1>iアプリ実験室 <span>公開テスト版</span></h1>
 <p>手元のアプリをブラウザで実行します。ゲームは付属しません。</p></header>
-<div class="workspace"><section class="controls">
+<div class="workspace"><div id="split" role="separator" aria-orientation="horizontal" aria-label="画面とキーの配分。上下の矢印キーでも変えられます。" tabindex="0"></div><section class="controls">
 <div id="dropzone" class="dropzone"><label for="files">JAR・JAM・SPを選択</label>
 <input id="files" type="file" multiple accept=".jar,.jam,.sp"><p class="note">ここへドラッグすることもできます。別フォルダーのSPは後から追加できます。</p></div>
 <ul id="file-list" class="file-list"></ul><button id="clear-files" type="button">選択をクリア</button>

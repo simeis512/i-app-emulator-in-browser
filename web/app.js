@@ -64,6 +64,7 @@ function setPlaying(on) {
   document.body.classList.toggle('playing',on);
   $('leave-play').textContent=on?'設定':'プレイ画面';
   $('play-tools').hidden=!booted;$('show-keypad').hidden=!on;
+  fitKeypad();
 }
 $('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
 // A keyboard or a gamepad makes the on-screen keys dead weight, so they can go.
@@ -74,8 +75,41 @@ function setKeypad(shown) {
   $('show-keypad').textContent=keypadOff?'キー表示':'キー非表示';
   try{localStorage.setItem('keypadOff',keypadOff?'1':'0');}catch{}
 }
-$('show-keypad').onclick=()=>{release();setKeypad(keypadOff);};
-setKeypad(!keypadOff);
+$('show-keypad').onclick=()=>{release();setKeypad(keypadOff);fitKeypad();};
+// The screen and the keys split the height; the bar between them sets the share,
+// and each side scales to fill its own band without changing shape.
+const padArea=document.querySelector('.controls'),padKeys=document.querySelector('.keypad');
+let share=62;
+try{share=Math.min(90,Math.max(20,Number(localStorage.getItem('playShare'))||62));}catch{}
+function fitKeypad() {
+  if(!document.body.classList.contains('playing'))return padKeys.style.removeProperty('--pad-scale');
+  const width=padKeys.offsetWidth,height=padKeys.offsetHeight;
+  if(!width||!height)return;
+  const scale=Math.min(padArea.clientWidth/width,padArea.clientHeight/height);
+  padKeys.style.setProperty('--pad-scale',scale>0?scale:1);
+}
+function applyShare() {
+  document.body.style.setProperty('--screen',share);
+  document.body.style.setProperty('--keys',100-share);
+  fitKeypad();
+}
+function saveShare(){try{localStorage.setItem('playShare',String(share));}catch{}}
+function moveSplit(clientY) {
+  const box=document.querySelector('.workspace').getBoundingClientRect();
+  if(!box.height)return;
+  share=Math.round(Math.min(90,Math.max(20,(clientY-box.top)/box.height*100)));
+  applyShare();
+}
+$('split').onpointerdown=e=>{e.preventDefault();$('split').setPointerCapture(e.pointerId);moveSplit(e.clientY);};
+$('split').onpointermove=e=>{if($('split').hasPointerCapture(e.pointerId))moveSplit(e.clientY);};
+$('split').onpointerup=$('split').onpointercancel=saveShare;
+$('split').onkeydown=e=>{
+  const step=e.key==='ArrowUp'?-3:e.key==='ArrowDown'?3:0;
+  if(!step)return;
+  e.preventDefault();share=Math.min(90,Math.max(20,share+step));applyShare();saveShare();
+};
+new ResizeObserver(fitKeypad).observe(padArea);
+setKeypad(!keypadOff);applyShare();
 // A browser's own bars leave little room sideways, so offer the whole screen.
 $('full-screen').hidden=!document.documentElement.requestFullscreen;
 $('full-screen').onclick=async()=>{
@@ -257,6 +291,7 @@ function applyTurn() {
     button.style.gridArea=keypadTurn===0?'':keypadTurn<0?`${4-column}/${row}`:`${column}/${5-row}`;
   });
   try{localStorage.setItem('keypadTurn',String(keypadTurn));}catch{}
+  fitKeypad();
 }
 try{keypadTurn=Number(localStorage.getItem('keypadTurn'))||0;}catch{}
 $('keypad-turn').value=String(keypadTurn);
@@ -294,7 +329,7 @@ function keycode(e) {
   return /^[0-9]$/.test(e.key)?e.key.charCodeAt(0):map[e.key];
 }
 document.addEventListener('keydown',e=>{
-  if(['SELECT','INPUT','TEXTAREA'].includes(e.target.tagName)||e.ctrlKey||e.altKey||e.metaKey)return;
+  if(['SELECT','INPUT','TEXTAREA'].includes(e.target.tagName)||e.target===$('split')||e.ctrlKey||e.altKey||e.metaKey)return;
   const code=keycode(e);if(code!==undefined && runtime){e.preventDefault();key('keyboard:'+e.code,code,true);}
 });
 document.addEventListener('keyup',e=>key('keyboard:'+e.code,keycode(e),false));
