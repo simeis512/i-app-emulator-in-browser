@@ -55,7 +55,9 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
   FueTrek/MA-3 ROM, instrument bank, native DLL or other audio resource is bundled.
 - `build_ogl.py` generates changes under `build/ogl-src/`: software-only backend,
   shared framebuffer bridge, explicit unsupported API errors, color masks,
-  secondary-texture limitation notices and perspective-triangle fog.
+  secondary-texture limitation notices, perspective-triangle fog, and per-pixel
+  rounding and texture wrapping through `ExactMath`, which returns the same values
+  as `Math.round` / `Math.floor` without their slow path under CheerpJ.
 
 `UPSTREAM.json` lists every vendored input and its SHA-256, as well as original
 snapshot archive hashes. These archives themselves are not distributed here.

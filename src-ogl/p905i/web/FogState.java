@@ -28,7 +28,7 @@ public final class FogState {
         f=Math.max(0,Math.min(1,f));int result=argb&0xff000000;
         for(int i=0;i<3;i++) {
             int shift=16-8*i;
-            int c=Math.round(((argb>>>shift)&255)*f+Math.max(0,Math.min(1,color[i]))*255*(1-f));
+            int c=ExactMath.round(((argb>>>shift)&255)*f+Math.max(0,Math.min(1,color[i]))*255*(1-f));
             result|=c<<shift;
         }
         return result;

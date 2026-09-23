@@ -43,6 +43,7 @@ src/p905i/web/MldPcm.java
 src/p905i/web/MldSharp.java
 src/p905i/web/MldNec.java
 src-ogl/p905i/web/FogState.java
+src-ogl/p905i/web/ExactMath.java
 tests/RuntimeChecks.java
 tests/AudioChecks.java
 tests/OglChecks.java

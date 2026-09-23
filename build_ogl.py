@@ -57,6 +57,17 @@ def build():
             old='int fragmentColor = applyTextureEnvironment(primaryColor, sampled, texture);'
             assert text.count(old)==1
             text=text.replace(old,old+'\n            fragmentColor = fog.apply(fragmentColor, 1f / denominator);')
+            # Per-pixel rounding and texture wrapping: Math.round/Math.floor dominated textured drawing under CheerpJ.
+            # ExactMath returns the same values for every input, so only the cost changes.
+            old='float wrapped = value - (float) Math.floor(value);'
+            assert text.count(old)==1
+            text=text.replace(old,'float wrapped = p905i.web.ExactMath.fraction(value);')
+            for old in ['clamp(Math.round(sampledU * (width - 1)), 0, width - 1)','clamp(Math.round(sampledV * (height - 1)), 0, height - 1)',
+                        'clamp(Math.round((x - x0) * 256f), 0, 256)','clamp(Math.round((y - y0) * 256f), 0, 256)',
+                        'clamp(Math.round(alpha), 0, 255)','clamp(Math.round(red), 0, 255)',
+                        'clamp(Math.round(green), 0, 255)','clamp(Math.round(blue), 0, 255)']:
+                assert text.count(old)==1,old
+                text=text.replace(old,old.replace('Math.round(','p905i.web.ExactMath.round('))
             renderer=text
         sources.append(write(rel,text))
     rel=Path('opendoja/host/DesktopSurface.java')
