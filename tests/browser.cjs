@@ -267,9 +267,13 @@ async function main() {
 
     console.log('Browser: reload and restore browser save over original SP');
     await page.route('**/__iapp/status',route=>route.fulfill({status:404,body:'Static host'}));
-    await boot();
+    await boot('auto');
     await page.unroute('**/__iapp/status');
     console.log('PASS static host without a build-status endpoint still starts');
+    assert.equal(await page.evaluate(()=>iapp.renderer),'2d','an application without OpenGL ES classes keeps the Java 8 runtime');
+    assert.match(await page.locator('#renderer option[value="auto"]').textContent(),/2D$/);
+    assert.equal(await page.locator('#warning').isHidden(),true);
+    console.log('PASS automatic renderer choice reads the JAR and keeps 2D');
     assert.equal((await page.evaluate(()=>iapp.audioStats())).instrument,'procedural');
     assert.equal((await save()).readInt32BE(0),36);
     assert.deepEqual(await pixel(40,95),[120,210,255,255]);

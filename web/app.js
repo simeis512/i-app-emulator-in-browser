@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { addFiles, prepareApplication } from './loader.mjs';
+import { addFiles, prepareApplication, usesOpenGl } from './loader.mjs';
 import { BrowserAudio } from './audio.mjs';
 import { readInstrumentFile } from './instruments.mjs';
 import { BrowserHaptics } from './haptics.mjs';
@@ -179,8 +179,15 @@ async function start() {
     await audioReady;
     status('ファイルを検証しています…');
     application=await prepareApplication(files);
+    let ogl=$('renderer').value==='ogl';
+    // The JVM version is fixed once per page, so choose before starting it. An unreadable archive keeps 2D.
+    if($('renderer').value==='auto') {
+      status('描画モードを判別しています…');
+      try { ogl=await usesOpenGl(application.jar); }
+      catch(error) { application.warning=[application.warning,`描画モードを判別できないため2Dで起動します（${error.message}）。3Dのアプリは描画モードを手動で選んでください。`].filter(Boolean).join(' '); }
+      $('renderer').options[0].textContent=`自動判別 → ${ogl?'OpenGL ES / 3D':'2D'}`;
+    }
     $('warning').textContent=application.warning;$('warning').hidden=!application.warning;
-    const ogl=$('renderer').value==='ogl';
     // The local server can compare JAR fingerprints with the current sources.
     // Static hosting has no such endpoint; its prebuilt distribution still works.
     let localBuilds;
@@ -231,7 +238,7 @@ async function start() {
     runtime=await lib.p905i.web.BrowserRuntime;
     $('log').textContent=application.warning;
     await javaCall(()=>runtime.start('/str/app.jar','/str/app.jam','/str/app.sp',`/files/iapp/${application.id}`,canvas.width,canvas.height,true));
-    window.iapp={get frames(){return frames;},id:application.id,
+    window.iapp={get frames(){return frames;},id:application.id,renderer:ogl?'ogl':'2d',
       audioStats:()=>audio?.stats(),
       getStatus:()=>javaCall(()=>runtime.getStatus()),
       exportScratchpad:()=>javaCall(()=>runtime.exportScratchpad())};

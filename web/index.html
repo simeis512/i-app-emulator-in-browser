@@ -10,7 +10,7 @@
 <input id="files" type="file" multiple accept=".jar,.jam,.sp"><p class="note">ここへドラッグすることもできます。別フォルダーのSPは後から追加できます。</p></div>
 <ul id="file-list" class="file-list"></ul><button id="clear-files" type="button">選択をクリア</button>
 <label for="size">画面サイズ</label><select id="size"><option value="240,240">240 × 240</option><option value="240,320">240 × 320</option><option value="426,240">426 × 240（横長）</option><option value="480,480">480 × 480</option><option value="480,854">480 × 854</option></select>
-<label for="renderer">描画モード</label><select id="renderer"><option value="2d">2D（通常）</option><option value="ogl">OpenGL ES / 3D（実験的）</option></select>
+<label for="renderer">描画モード</label><select id="renderer"><option value="auto">自動判別</option><option value="2d">2D</option><option value="ogl">OpenGL ES / 3D（実験的）</option></select>
 <div class="audio-controls"><label><input id="sound" type="checkbox" checked> 音声（試験中）</label>
 <label for="volume">音量 <span id="volume-value">30%</span></label><input id="volume" type="range" min="0" max="100" value="30">
 <label for="pcm-volume">PCM音量（効果音など） <span id="pcm-volume-value">25%</span></label><input id="pcm-volume" type="range" min="0" max="100" value="25" aria-describedby="pcm-volume-note">

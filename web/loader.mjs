@@ -60,3 +60,53 @@ export function addFiles(current, incoming) {
   }
   return result;
 }
+
+// OpenGL ES applications need the Java 17 adapter; opt/ui/j3d belongs to the 2D runtime and is not matched.
+const OPENGL = ['com/nttdocomo/ui/ogl/', 'com/nttdocomo/opt/ui/ogl/'].map(s => new TextEncoder().encode(s));
+function contains(bytes, needle) {
+  for (let i = bytes.indexOf(needle[0]); i >= 0 && i <= bytes.length-needle.length; i = bytes.indexOf(needle[0], i+1)) {
+    let k = 1; while (k < needle.length && bytes[i+k] === needle[k]) k++;
+    if (k === needle.length) return true;
+  }
+  return false;
+}
+async function inflate(raw, size) {
+  let stream;
+  try { stream = new DecompressionStream('deflate-raw'); } catch { throw new Error('このブラウザはJARの展開に対応していません。'); }
+  const reader = new Blob([raw]).stream().pipeThrough(stream).getReader();
+  const out = new Uint8Array(size); let at = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (at+value.length > size) { await reader.cancel(); throw new Error('JAR内のクラスが申告より大きく展開されます。'); }
+    out.set(value, at); at += value.length;
+  }
+  if (at !== size) throw new Error('JAR内のクラスが申告どおりに展開できません。');
+  return out;
+}
+// Reads every class through the central directory, bounded by the declared sizes, and reports whether any
+// refers to the OpenGL ES packages. Throws when the archive cannot be read; the caller then keeps 2D.
+export async function usesOpenGl(jar) {
+  const view = new DataView(jar.buffer, jar.byteOffset, jar.byteLength), fail = () => { throw new Error('JARの目次を読めません。'); };
+  let end = -1;
+  for (let i = jar.length-22; i >= Math.max(0, jar.length-22-65535); i--) if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  if (end < 0) fail();
+  const count = view.getUint16(end+10, true), size = view.getUint32(end+12, true), start = view.getUint32(end+16, true);
+  if (start+size > end) fail();
+  let p = start, total = 0;
+  for (let n = 0; n < count; n++) {
+    if (p+46 > start+size || view.getUint32(p, true) !== 0x02014b50) fail();
+    const flags = view.getUint16(p+8, true), method = view.getUint16(p+10, true), packed = view.getUint32(p+20, true),
+      unpacked = view.getUint32(p+24, true), nameLength = view.getUint16(p+28, true), local = view.getUint32(p+42, true);
+    const name = new TextDecoder().decode(jar.subarray(p+46, p+46+nameLength));
+    p += 46+nameLength+view.getUint16(p+30, true)+view.getUint16(p+32, true);
+    if (p > start+size) fail();
+    if (!name.endsWith('.class')) continue;
+    if ((flags & 1) || (method !== 0 && method !== 8) || local+30 > jar.length || view.getUint32(local, true) !== 0x04034b50) fail();
+    const data = local+30+view.getUint16(local+26, true)+view.getUint16(local+28, true);
+    if (data+packed > jar.length || (method === 0 && packed !== unpacked) || (total += unpacked) > MAX_BYTES) fail();
+    const raw = jar.subarray(data, data+packed), bytes = method === 0 ? raw : await inflate(raw, unpacked);
+    if (OPENGL.some(needle => contains(bytes, needle))) return true;
+  }
+  return false;
+}
