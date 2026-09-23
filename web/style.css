@@ -8,8 +8,10 @@
 .stage{min-width:0}canvas{touch-action:none}
 /* Play mode keeps the screen and the keypad on one screenful, so a phone needs no scrolling. */
 #split{display:none}
-#play-tools{position:fixed;top:8px;right:8px;z-index:9;display:flex;gap:6px}
-#play-tools button{font-size:12px;padding:6px 8px;opacity:.9;min-width:74px}
+#play-tools{position:fixed;top:9px;right:12px;z-index:9;display:flex;gap:6px}
+#play-tools button{font-size:12px;line-height:1;padding:8px 10px;min-width:78px;border-radius:8px;
+background:#223043cc;border-color:#3a4c66;backdrop-filter:blur(6px)}
+#play-tools button:hover{background:#2f4059cc}
 body.playing.no-keypad .controls,body.playing.no-keypad #split{display:none}
 /* Play mode is a class, not a screen size, so any device can switch into it. */
 body.playing{overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
@@ -18,24 +20,36 @@ body.playing header,body.playing footer{display:none}
 body.playing .workspace{display:flex;flex-direction:column;flex:1;min-height:0;gap:0}
 body.playing .viewer{order:1;flex:var(--screen,62) 1 0;min-height:0;display:flex}
 body.playing .viewer>.note,body.playing .viewer>details{display:none}
-body.playing .device{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:6px 6px 0;box-shadow:none}
-body.playing .device-label{margin-bottom:4px;gap:12px;padding-right:246px;min-height:30px;overflow:hidden}
+body.playing .device{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;max-width:none;border:0;border-radius:0;padding:0;box-shadow:none}
+body.playing .device-label{align-items:center;height:46px;margin:0 0 10px;padding:0 264px 0 14px;gap:12px;
+background:#121b27;border-bottom:1px solid #223041;letter-spacing:.06em;overflow:hidden}
 body.playing .device-label span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body.playing #resolution{display:none}
 body.playing .device-footer{display:none}
-body.playing .stage{flex:1;min-height:0;container-type:size;display:flex;flex-direction:column;justify-content:center}
-body.playing canvas{width:min(100cqw,calc((100cqh - 30px)*var(--aspect,1)));height:auto;align-self:center}
+body.playing .stage{flex:1;min-height:0;margin:0 12px;container-type:size;display:flex;flex-direction:column;justify-content:center}
+body.playing canvas{width:min(100cqw,calc((100cqh - 38px)*var(--aspect,1)));height:auto;align-self:center;
+box-shadow:0 0 0 1px #223041}
+/* The strip belonged to the screen, so give it the screen's width. */
+body.playing .soft-labels{width:min(100cqw,calc((100cqh - 38px)*var(--aspect,1)));align-self:center;
+margin:8px 0 0;font-size:11px;min-height:0}
 /* The bar between them sets the share; each side then fills its own band whole. */
-body.playing #split{order:2;display:block;flex:0 0 18px;position:relative;cursor:row-resize;
-touch-action:none;background:#16202e;border-top:1px solid #2c3949;border-bottom:1px solid #2c3949}
-body.playing #split::after{content:"";position:absolute;top:50%;left:50%;width:46px;height:4px;
-margin:-2px 0 0 -23px;border-radius:2px;background:#4d6b90}
-body.playing #split:focus-visible{outline:2px solid #81c9ff;outline-offset:-2px}
-body.playing .controls{order:3;flex:var(--keys,38) 1 0;min-height:0;padding:4px 6px;
+body.playing #split{order:2;flex:0 0 24px;margin:12px 0;position:relative;cursor:row-resize;touch-action:none;
+display:flex;align-items:center;justify-content:center}
+body.playing #split::before{content:"";position:absolute;left:14px;right:14px;height:1px;background:#212e3e}
+body.playing #split::after{content:"";position:relative;width:54px;height:6px;border-radius:3px;
+background:#37485f;transition:background .15s,width .15s}
+body.playing #split:hover::after{background:#4d6b90}
+body.playing #split.dragging::after{background:#81c9ff;width:72px}
+body.playing #split:focus-visible{outline:2px solid #81c9ff;outline-offset:2px;border-radius:6px}
+body.playing .controls{order:3;flex:var(--keys,38) 1 0;min-height:0;padding:0 12px 12px;
 display:flex;align-items:center;justify-content:center;overflow:hidden}
 body.playing .controls>*{display:none}
 body.playing .controls>.keypad{display:flex;flex:0 0 auto;width:340px;margin:0;
 transform:scale(var(--pad-scale,1));transform-origin:center}
+/* A wide, short band suits the two halves side by side; the keys keep their meaning. */
+body.playing .controls>.keypad.wide{flex-direction:row;align-items:center;width:auto;gap:18px}
+body.playing .keypad.wide .dpad-row{width:300px}
+body.playing .keypad.wide .numpad{width:250px}
 body.playing .soft-labels{margin:6px 0 0;font-size:11px;min-height:0}
 
 /* A handset dial is a ring, so the outer band sends a direction and a diagonal sends two. */

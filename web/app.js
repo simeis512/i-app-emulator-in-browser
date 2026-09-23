@@ -82,11 +82,24 @@ const padArea=document.querySelector('.controls'),padKeys=document.querySelector
 let share=62;
 try{share=Math.min(90,Math.max(20,Number(localStorage.getItem('playShare'))||62));}catch{}
 function fitKeypad() {
-  if(!document.body.classList.contains('playing'))return padKeys.style.removeProperty('--pad-scale');
-  const width=padKeys.offsetWidth,height=padKeys.offsetHeight;
-  if(!width||!height)return;
-  const scale=Math.min(padArea.clientWidth/width,padArea.clientHeight/height);
-  padKeys.style.setProperty('--pad-scale',scale>0?scale:1);
+  if(!document.body.classList.contains('playing')) {
+    padKeys.classList.remove('wide');delete padKeys.dataset.wide;
+    return padKeys.style.removeProperty('--pad-scale');
+  }
+  // Keep the handset's own stacking while it stays comfortable, and only fall back
+  // to the two halves side by side when a wide, short band would leave it tiny.
+  const fit=wide=>{
+    padKeys.classList.toggle('wide',wide);
+    const width=padKeys.offsetWidth,height=padKeys.offsetHeight;
+    return width&&height?Math.min(padArea.clientWidth/width,padArea.clientHeight/height):0;
+  };
+  const stacked=fit(false),side=fit(true);
+  // Leave a gap between the two thresholds so dragging the bar cannot flip it back and forth.
+  const wide=side>stacked&&stacked<(padKeys.dataset.wide?.9:.8);
+  padKeys.classList.toggle('wide',wide);
+  if(wide)padKeys.dataset.wide='1';else delete padKeys.dataset.wide;
+  const scale=wide?side:stacked;
+  if(scale>0)padKeys.style.setProperty('--pad-scale',scale);
 }
 function applyShare() {
   document.body.style.setProperty('--screen',share);
@@ -100,9 +113,11 @@ function moveSplit(clientY) {
   share=Math.round(Math.min(90,Math.max(20,(clientY-box.top)/box.height*100)));
   applyShare();
 }
-$('split').onpointerdown=e=>{e.preventDefault();$('split').setPointerCapture(e.pointerId);moveSplit(e.clientY);};
+$('split').onpointerdown=e=>{
+  e.preventDefault();$('split').setPointerCapture(e.pointerId);$('split').classList.add('dragging');moveSplit(e.clientY);
+};
 $('split').onpointermove=e=>{if($('split').hasPointerCapture(e.pointerId))moveSplit(e.clientY);};
-$('split').onpointerup=$('split').onpointercancel=saveShare;
+$('split').onpointerup=$('split').onpointercancel=()=>{$('split').classList.remove('dragging');saveShare();};
 $('split').onkeydown=e=>{
   const step=e.key==='ArrowUp'?-3:e.key==='ArrowDown'?3:0;
   if(!step)return;
