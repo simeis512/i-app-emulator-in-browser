@@ -173,6 +173,19 @@ async function main() {
     await page.keyboard.press('*');
     await page.waitForFunction(()=>buzzes.includes(0));
     console.log('PASS key presses and the application vibrator both reach the device');
+    // A pad with a motor of its own should answer alongside the handset.
+    await page.evaluate(()=>{
+      window.rumbles=[];
+      const pad={index:0,id:'authored pad',mapping:'standard',buttons:[],axes:[],
+        vibrationActuator:{playEffect:(kind,options)=>{window.rumbles.push([kind,options.duration]);return Promise.resolve();},reset(){}}};
+      window.realPads=navigator.getGamepads;navigator.getGamepads=()=>[pad];
+    });
+    await page.locator('.numpad button[data-key="50"]').click();
+    const rumbles=await page.evaluate(()=>rumbles);
+    assert.ok(rumbles.length>0&&rumbles.every(([kind,duration])=>kind==='dual-rumble'&&duration>=20),
+      'a connected pad rumbles with the same press');
+    await page.evaluate(()=>{navigator.getGamepads=window.realPads;});
+    console.log('PASS a gamepad with a motor rumbles alongside the handset');
     // A locked screen or another tab has to fall silent.
     await page.waitForFunction(()=>iapp.audioStats().rms>.001);
     await page.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true});

@@ -142,18 +142,32 @@ document.addEventListener('fullscreenchange',()=>{$('full-screen').textContent=d
 // Keys on glass give nothing back, so answer a press the way the handset did.
 const canBuzz=typeof navigator.vibrate==='function';
 let appBuzz=0;
-if(!canBuzz){$('haptics').checked=false;$('haptics').disabled=true;$('haptics-note').textContent='この端末・ブラウザは振動に対応していません。';}
+// A pad can arrive later than the page, so never decide once that nothing can rumble.
+function rumblers(){return pads().filter(pad=>pad.vibrationActuator?.playEffect);}
+function haptic(text){if($('haptics-note').textContent!==text)$('haptics-note').textContent=text;}
 // A pulse this short never reaches the motor on most handsets, so a key needs a real one.
 const TAP=25;
-function buzz(milliseconds){
-  if(!canBuzz||!$('haptics').checked)return;
-  // A browser that declines says so; report it rather than leaving a dead setting.
-  try{if(navigator.vibrate(milliseconds)===false)$('haptics-note').textContent='ブラウザが振動を実行しませんでした。端末のマナーモードや振動の設定を確認してください。';}
-  catch(error){$('haptics-note').textContent='振動を実行できません: '+(error.message||error);}
+function buzz(milliseconds) {
+  if(!$('haptics').checked)return;
+  let answered=false;
+  if(canBuzz){try{answered=navigator.vibrate(milliseconds)!==false;}catch{}}
+  const strong=milliseconds>200?.9:.6;
+  for(const pad of rumblers()) {
+    answered=true;
+    pad.vibrationActuator.playEffect('dual-rumble',{duration:Math.min(milliseconds,5000),
+      strongMagnitude:strong,weakMagnitude:strong*.6}).catch(()=>{});
+  }
+  haptic(answered?'キー操作とアプリの指示で振動します。':
+    canBuzz?'ブラウザが振動を実行しませんでした。端末のマナーモードや振動の設定を確認してください。':
+    'この端末・ブラウザは振動に対応していません。対応するゲームパッドを接続すると振動します。');
+}
+function hush() {
+  if(canBuzz)try{navigator.vibrate(0);}catch{}
+  for(const pad of rumblers())pad.vibrationActuator.reset?.();
 }
 function appVibrate(on) {
   clearInterval(appBuzz);appBuzz=0;
-  if(!on||!canBuzz||!$('haptics').checked){if(canBuzz)try{navigator.vibrate(0);}catch{}return;}
+  if(!on||!$('haptics').checked)return hush();
   buzz(1500);appBuzz=setInterval(()=>buzz(1500),1400);
 }
 $('haptics').onchange=()=>{if(!$('haptics').checked)appVibrate(0);};

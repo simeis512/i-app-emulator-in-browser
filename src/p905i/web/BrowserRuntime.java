@@ -139,6 +139,8 @@ public final class BrowserRuntime {
         int on = com.nttdocomo.ui.PhoneSystem.getAttribute(com.nttdocomo.ui.PhoneSystem.DEV_VIBRATOR);
         if (on == vibrating) return;
         vibrating = on;
+        // Report it so a silent device can be told from an application that never asked.
+        recordLog("Application vibrator " + (on != 0 ? "on" : "off"));
         vibrate(on);
     }
     public static synchronized void recordLog(String line) {
