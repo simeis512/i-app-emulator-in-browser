@@ -66,20 +66,25 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.readPixels(0,0,width,height,gl.RGBA,gl.UNSIGNED_BYTE,scratch.subarray(0,n*4));
     swap(argb,width,height,false);
   }
-  function draw(surface,vertices,colors,vertexCount,commands,commandCount) {
+  function draw(surface,vertices,colors,vertexCount,commands,commandCount,floats) {
     const s=surfaces[surface];
     gl.bindFramebuffer(gl.FRAMEBUFFER,s.framebuffer);
     gl.useProgram(program);gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer);gl.bufferData(gl.ARRAY_BUFFER,vertices.subarray(0,vertexCount*6),gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(colors.buffer,colors.byteOffset,vertexCount*4),gl.STREAM_DRAW);
-    gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
     for(let c=0;c<commandCount;c++){
       const o=c*COMMAND;
       if(commands[o]===DRAW){
         gl.viewport(commands[o+3],commands[o+4],commands[o+5],commands[o+6]);
         if(commands[o+7]){gl.enable(gl.SCISSOR_TEST);gl.scissor(commands[o+8],commands[o+9],commands[o+10],commands[o+11]);}
         else gl.disable(gl.SCISSOR_TEST);
+        // Software compares reversed depth in the reversed direction, so GL's functions apply as they are.
+        // Without the test GL writes no depth, as the software path does.
+        if(commands[o+12]){gl.enable(gl.DEPTH_TEST);gl.depthFunc(commands[o+13]);gl.depthMask(commands[o+14]===1);}
+        else gl.disable(gl.DEPTH_TEST);
+        gl.depthRange(floats[c*FLOATS+1],floats[c*FLOATS+2]);
         gl.drawArrays(gl.TRIANGLES,commands[o+1],commands[o+2]);
       }else if(commands[o]===CLEAR_DEPTH){
         // As in software, a depth clear resets the whole buffer whatever the viewport or clip.

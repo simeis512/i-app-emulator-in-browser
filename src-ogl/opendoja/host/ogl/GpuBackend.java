@@ -129,7 +129,6 @@ final class GpuBackend {
         capture(clip);
         OglRenderer.OglState ogl = renderer.oglState();
         if (ogl.textureEnabled()) notice("textures are not drawn yet");
-        if (ogl.depthEnabled()) notice("depth testing is not applied yet");
         if (ogl.blendCapEnabled) notice("blending is not applied yet");
         if (ogl.alphaTestEnabled) notice("the alpha test is not applied yet");
         if (renderer.fogEnabled()) notice("fog is not drawn");
@@ -198,6 +197,12 @@ final class GpuBackend {
             state[10] = clip.width;
             state[11] = clip.height;
         }
+        // The software path compares reversed depth in the reversed direction, so GL's own functions match it.
+        state[12] = ogl.depthEnabled() ? 1 : 0;
+        state[13] = ogl.depthFunc;
+        state[14] = ogl.depthMask ? 1 : 0;
+        stateFloats[1] = ogl.depthRangeNear;
+        stateFloats[2] = ogl.depthRangeFar;
     }
 
     private void command(int type, int first, int count) {
