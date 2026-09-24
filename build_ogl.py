@@ -312,8 +312,12 @@ def build():
             for old,new in [
                 ('        ogl.viewportHeight = host.surface().height();\n    }\n',
                  '        ogl.viewportHeight = host.surface().height();\n        gpu = GpuBackend.create(this);\n    }\n\n'
-                 '    private final GpuBackend gpu;\n\n    boolean fogEnabled() {\n        return fog.enabled;\n    }\n\n'
-                 '    boolean[] alphaPassForGpu() {\n        return ogl.alphaTestEnabled ? alphaPassTable() : null;\n    }\n'),
+                 '    private final GpuBackend gpu;\n\n    p905i.web.FogState fogForGpu() {\n        return fog;\n    }\n\n'
+                 '    boolean[] alphaPassForGpu() {\n        return ogl.alphaTestEnabled ? alphaPassTable() : null;\n    }\n\n'
+                 '    public boolean gpuActive() {\n        return gpu != null;\n    }\n\n'
+                 '    public void gpuColorMask(boolean red, boolean green, boolean blue, boolean alpha) {\n'
+                 '        if (gpu != null) {\n            gpu.colorMask(red, green, blue, alpha);\n        }\n    }\n\n'
+                 '    public void gpuFlush() {\n        if (gpu != null) {\n            gpu.flush();\n        }\n    }\n'),
                 ('    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n',
                  '    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n    if (gpu != null) {\n        gpu.begin();\n    }\n'),
                 ('    ogl.endDrawing();\n    /* Native backend excluded; using software renderer. */\n',
@@ -359,8 +363,14 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
     private int writeMask = -1;
     public void glColorMask(boolean red, boolean green, boolean blue, boolean alpha) {
         writeMask=(red?0x00ff0000:0)|(green?0x0000ff00:0)|(blue?0x000000ff:0)|(alpha?0xff000000:0);
+        ogl.gpuColorMask(red,green,blue,alpha);
     }
-    private int[] beforeMaskedDraw() { return writeMask == -1 ? null : canvasData.clone(); }
+    // The GPU renderer masks its own draws; a colour clear is still filled on the CPU, once the GPU picture is back.
+    private int[] beforeMaskedDraw(boolean clear) {
+        if(writeMask == -1) return null;
+        if(ogl.gpuActive()) { if(!clear) return null; ogl.gpuFlush(); }
+        return canvasData.clone();
+    }
     private void afterMaskedDraw(int[] before) {
         if(before!=null) for(int i=0;i<canvasData.length;i++) canvasData[i]=(canvasData[i]&writeMask)|(before[i]&~writeMask);
     }
@@ -400,7 +410,7 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
             guard='if(activeTexture!=GL_TEXTURE0) { reflectionNotice(); return; } '
         call=('return ' if result!='void' else '')+f'ogl.{name}({args});'
         if name in ['glClear','glDrawArrays','glDrawElements']:
-            call='int[] before=beforeMaskedDraw(); try { '+call+' } finally { afterMaskedDraw(before); }'
+            call=f'int[] before=beforeMaskedDraw({str(name=="glClear").lower()}); try {{ '+call+' } finally { afterMaskedDraw(before); }'
         adapter+=f'    public {result} {name}({params}) {{ '+guard+call+' }\n'
     interface2=(UP/'com/nttdocomo/opt/ui/ogl/GraphicsOGL2.java').read_text(encoding='utf-8')
     for result,name,params in re.findall(r'\b(void) (gl\w+)\(([^)]*)\);',interface2):

@@ -16,7 +16,7 @@ import p905i.web.WebGl;
  * with the state of its draw call, and a 3D section goes to the browser in one batch. Colour is one GPU texture per
  * image, shared by the renderers drawing on it; depth belongs to each renderer, as in the software path. */
 final class GpuBackend {
-    static final int COMMAND = 36, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 4;
+    static final int COMMAND = 37, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 10;
     private static final int MAX_VERTICES = 3 * 21000;
     private static int enabled = -1;
     private static final Map<BufferedImage, Integer> targets = new IdentityHashMap<>();
@@ -54,6 +54,7 @@ final class GpuBackend {
     private final int[] state = new int[COMMAND];
     private final float[] stateFloats = new float[FLOATS];
     private boolean section, implicit, uploaded, drawn;
+    private int colorMask = 15;
     private int drawFirst;
 
     private GpuBackend(OglRenderer renderer) {
@@ -123,6 +124,11 @@ final class GpuBackend {
         if ((mask & GraphicsOGL.GL_COLOR_BUFFER_BIT) != 0) cpuWrite();
     }
 
+    /** glColorMask as red, green, blue and alpha bits; the adapter no longer masks GPU draws on the CPU. */
+    void colorMask(boolean red, boolean green, boolean blue, boolean alpha) {
+        colorMask = (red ? 1 : 0) | (green ? 2 : 0) | (blue ? 4 : 0) | (alpha ? 8 : 0);
+    }
+
     void beginDraw(Rectangle clip) {
         if (!section) {
             section = true;
@@ -132,7 +138,6 @@ final class GpuBackend {
         capture(clip);
         OglRenderer.OglState ogl = renderer.oglState();
         if (ogl.textureEnabled() && ogl.textureEnvMode == GraphicsOGL.GL_COMBINE) notice("GL_COMBINE is drawn as GL_MODULATE");
-        if (renderer.fogEnabled()) notice("fog is not drawn");
         drawFirst = vertexCount;
     }
 
@@ -204,6 +209,8 @@ final class GpuBackend {
         state[14] = ogl.depthMask ? 1 : 0;
         stateFloats[1] = ogl.depthRangeNear;
         stateFloats[2] = ogl.depthRangeFar;
+        state[27] = colorMask;
+        state[36] = renderer.fogForGpu().copyTo(stateFloats, 3);
         // GPU blending rounds its own way; software rounds integer sums. The alpha test is the software table itself.
         state[15] = ogl.blendCapEnabled ? 1 : 0;
         state[16] = ogl.blendSrcFactor;

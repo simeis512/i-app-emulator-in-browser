@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
-// Keys 1 to 4 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending.
+// Keys 1 to 5 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
+// 5 fog and colour masks.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
 
@@ -12,7 +13,7 @@ public class TestOgl extends IApplication {
         volatile int scene=1;
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
-            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_4)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_5)scene=key-Display.KEY_0;
         }
         FloatBuffer floats(float... values) { return buffers.allocateFloatBuffer(values); }
         void shape(GraphicsOGL gl,int mode,int shade,float[] vertices,float[] colors) {
@@ -38,7 +39,7 @@ public class TestOgl extends IApplication {
             gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
             gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisable(GraphicsOGL.GL_DEPTH_TEST);gl.glDisable(GraphicsOGL.GL_CULL_FACE);
             gl.glEnableClientState(GraphicsOGL.GL_VERTEX_ARRAY);gl.glEnableClientState(GraphicsOGL.GL_COLOR_ARRAY);
-            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else colours(gl,w,h);
+            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else colours(gl,w,h);
             gl.glViewport(0,0,w,h);
             gl.endDrawing();
             // 2D over the 3D.
@@ -173,6 +174,28 @@ public class TestOgl extends IApplication {
             gl.glEnable(GraphicsOGL.GL_BLEND);gl.glBlendFunc(GraphicsOGL.GL_DST_COLOR,GraphicsOGL.GL_ZERO);
             tinted(gl,.6f,-.8f,.9f,-.2f, .5f,1,.6f,1);
             gl.glDisable(GraphicsOGL.GL_BLEND);
+        }
+        void fog(GraphicsOGL gl,int w,int h) {
+            // A colour clear through a mask: only green (and alpha) change, across the whole picture.
+            gl.glClearColor(.6f,1,0,1);gl.glColorMask(false,true,false,true);gl.glClear(GraphicsOGL.GL_COLOR_BUFFER_BIT);
+            gl.glColorMask(true,true,true,true);
+            // Quads at eye distances 1, 3 and 6, sized to keep their place on screen, under linear, EXP and EXP2 fog.
+            gl.glMatrixMode(GraphicsOGL.GL_PROJECTION);gl.glLoadIdentity();gl.glFrustumf(-.1f,.1f,-.1f,.1f,.1f,20);
+            gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
+            gl.glEnable(GraphicsOGL.GL_FOG);gl.glFogfv(GraphicsOGL.GL_FOG_COLOR,new float[]{.2f,.2f,.8f,1});
+            int[] modes={GraphicsOGL.GL_LINEAR,GraphicsOGL.GL_EXP,GraphicsOGL.GL_EXP2};float[] densities={0,.25f,.2f};
+            float[] distances={1,3,6},rows={.6f,.1f,-.4f},columns={-.6f,0,.6f};
+            for(int m=0;m<3;m++){
+                gl.glFogf(GraphicsOGL.GL_FOG_MODE,modes[m]);gl.glFogf(GraphicsOGL.GL_FOG_START,1);gl.glFogf(GraphicsOGL.GL_FOG_END,8);
+                gl.glFogf(GraphicsOGL.GL_FOG_DENSITY,densities[m]);
+                for(int r=0;r<3;r++){float d=distances[r],x=columns[m]*d,y=rows[r]*d,s=.2f*d;
+                    quad(gl,x-s,y-s,x+s,y+s,-d,1,.9f,.6f);}
+            }
+            gl.glDisable(GraphicsOGL.GL_FOG);
+            // A white quad drawn through a mask that lets only red (and alpha) through.
+            gl.glMatrixMode(GraphicsOGL.GL_PROJECTION);gl.glLoadIdentity();gl.glOrthof(-1,1,-1,1,-1,1);
+            gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
+            gl.glColorMask(true,false,false,true);tinted(gl,.55f,-.95f,.95f,-.7f,1,1,1,1);gl.glColorMask(true,true,true,true);
         }
         public void run() {try{while(true){repaint();Thread.sleep(100);}}catch(Exception e){throw new RuntimeException(e);}}
     }

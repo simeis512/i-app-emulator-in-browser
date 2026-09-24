@@ -405,6 +405,9 @@ async function main() {
       // GPU blending rounds its own way where software rounds integer sums, so blended colours may be a level off.
       {key:'4',name:'alpha tests and blending',tolerance:2,
         points:[[10,95],[22,74],[38,46],[82,74],[98,46],[138,60],[174,60],[216,60],[18,180],[54,180],[90,180],[150,180],[210,180]]},
+      // The GPU's exp() may differ from Math.exp in the last bits, moving a fogged level by one.
+      {key:'5',name:'fog and colour masks',tolerance:1,
+        points:[[10,8],[120,20],[48,48],[48,108],[48,168],[120,48],[120,108],[120,168],[192,48],[192,108],[192,168],[210,219]]},
     ];
     const pictures={ogl:[],webgl:[]},logs={};
     for(const mode of ['ogl','webgl']) {

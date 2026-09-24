@@ -19,6 +19,12 @@ public final class FogState {
         if(pname==0x0B66)System.arraycopy(values,0,color,0,4);
         else parameter(pname,values[0]);
     }
+    /** The mode, or 0 when fog is off, for the GPU renderer; parameters go to out: density, start, end, colour. */
+    public int copyTo(float[] out,int at) {
+        if(!enabled)return 0;
+        out[at]=density;out[at+1]=start;out[at+2]=end;System.arraycopy(color,0,out,at+3,3);
+        return mode;
+    }
     public int apply(int argb,float distance) {
         if(!enabled)return argb;
         float f;

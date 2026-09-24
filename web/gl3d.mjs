@@ -2,7 +2,7 @@
 // Experimental WebGL2 renderer for the OpenGL ES bridge. Java still fetches, transforms, lights and clips; it hands
 // over clip-space triangles with one state record per draw call, a 3D section at a time. Colour is one texture per
 // image, shared by the Graphics drawing on it; each Graphics draws through its own framebuffer and depth buffer.
-const COMMAND=36, DRAW=1, CLEAR_DEPTH=2, FLOATS=4;
+const COMMAND=37, DRAW=1, CLEAR_DEPTH=2, FLOATS=10;
 const VERTEX=`#version 300 es
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
@@ -20,6 +20,9 @@ uniform sampler2D tex;
 uniform int textured, texKey, texFlags, envMode, baseFormat, envColor, alphaTest;
 // The software alpha test as 256 pass bits, one per alpha byte, so no GPU division decides a boundary.
 uniform int alphaBits[8];
+// Fog after the texture function and before the alpha test, at the eye distance 1/w, as FogState applies it.
+uniform int fogMode;
+uniform vec3 fogParams, fogColor;
 uniform ivec2 texSize;
 in vec4 vColor;
 in vec2 vUv;
@@ -62,6 +65,14 @@ void main(){
       p=pack(c);
     }
   }
+  if(fogMode!=0){
+    float d=1.0/gl_FragCoord.w,f;
+    if(fogMode==9729)f=fogParams.z==fogParams.y?(d<=fogParams.y?1.0:0.0):(fogParams.z-d)/(fogParams.z-fogParams.y);
+    else if(fogMode==2049)f=exp(-fogParams.x*fogParams.x*d*d);
+    else f=exp(-fogParams.x*d);
+    f=clamp(f,0.0,1.0);
+    p.rgb=ivec3(floor(vec3(p.rgb)*f+clamp(fogColor,0.0,1.0)*255.0*(1.0-f)+0.5));
+  }
   if(alphaTest!=0&&((alphaBits[p.a>>5]>>(p.a&31))&1)==0)discard;
   fragment=vec4(p)/255.0;
 }`;
@@ -90,7 +101,7 @@ export function createGl3d(documentRef=globalThis.document) {
     colorBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,4,gl.UNSIGNED_BYTE,true,4,0);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);gl.pixelStorei(gl.PACK_ALIGNMENT,1);
-    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize','alphaTest','alphaBits']
+    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize','alphaTest','alphaBits','fogMode','fogParams','fogColor']
       .map(name=>[name,gl.getUniformLocation(program,name==='alphaBits'?'alphaBits[0]':name)]));
     gl.useProgram(program);gl.uniform1i(uniforms.tex,0);
     // Unit 0 must never be left holding a picture texture: sampling the texture being drawn into is refused.
@@ -161,6 +172,10 @@ export function createGl3d(documentRef=globalThis.document) {
         gl.depthRange(floats[c*FLOATS+1],floats[c*FLOATS+2]);
         // GPU blending rounds its own way; the software path rounds integer sums, so results may differ by a level.
         if(commands[o+15]){gl.enable(gl.BLEND);gl.blendFunc(commands[o+16],commands[o+17]);}else gl.disable(gl.BLEND);
+        const mask=commands[o+27];gl.colorMask((mask&1)!==0,(mask&2)!==0,(mask&4)!==0,(mask&8)!==0);
+        gl.uniform1i(uniforms.fogMode,commands[o+36]);
+        if(commands[o+36]){const f=c*FLOATS;gl.uniform3f(uniforms.fogParams,floats[f+3],floats[f+4],floats[f+5]);
+          gl.uniform3f(uniforms.fogColor,floats[f+6],floats[f+7],floats[f+8]);}
         gl.uniform1i(uniforms.alphaTest,commands[o+26]);
         if(commands[o+26])gl.uniform1iv(uniforms.alphaBits,commands.subarray(o+28,o+36));
         const textured=commands[o+18],key=commands[o+19];
@@ -177,6 +192,7 @@ export function createGl3d(documentRef=globalThis.document) {
         gl.disable(gl.SCISSOR_TEST);gl.depthMask(true);gl.clearDepth(1);gl.clear(gl.DEPTH_BUFFER_BIT);stats.clears++;
       }
     }
+    gl.colorMask(true,true,true,true);
   }
   return {
     get active(){return gl!==null;},
