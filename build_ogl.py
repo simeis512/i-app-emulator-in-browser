@@ -379,6 +379,9 @@ def build():
                 ('    boolean useBackColor = ogl.lightModelTwoSide && !isFrontFacing(v0, v1, v2);\n',
                  '    boolean useBackColor = ogl.lightModelTwoSide && !isFrontFacing(v0, v1, v2);\n    if (gpu != null) {\n'
                  '        gpu.triangle(v0, v1, v2, useBackColor);\n        return;\n    }\n'),
+                ('        ogl.textures.remove(textureId);\n',
+                 '        OglTexture removed = ogl.textures.remove(textureId);\n        if (removed != null) {\n'
+                 '            GpuBackend.forget(removed);\n        }\n'),
                 ('    if (primitiveCount < 2) {\n        return;\n    }\n    if (!software.populateRasterVertex(firstVertex',
                  '    if (primitiveCount < 2) {\n        return;\n    }\n    if (gpu != null) {\n'
                  '        GpuBackend.notice("lines are drawn by the CPU between GPU batches");\n        gpu.cpuWrite();\n    }\n'

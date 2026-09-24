@@ -2,7 +2,8 @@
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
 // Keys 1 to 5 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
-// 5 fog and colour masks; 6 2D, pixel reads, a second Graphics and an image copy inside 3D sections.
+// 5 fog and colour masks; 6 2D, pixel reads, a second Graphics and an image copy inside 3D sections;
+// 7 textures and vertex arrays changed after use, a deleted texture and a viewport past the screen edges.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
 
@@ -13,7 +14,7 @@ public class TestOgl extends IApplication {
         volatile int scene=1;
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
-            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_6)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_7)scene=key-Display.KEY_0;
         }
         FloatBuffer floats(float... values) { return buffers.allocateFloatBuffer(values); }
         void shape(GraphicsOGL gl,int mode,int shade,float[] vertices,float[] colors) {
@@ -35,7 +36,7 @@ public class TestOgl extends IApplication {
             g.setColor(Graphics.getColorOfRGB(200,200,200));g.fillRect(0,h-40,w,40);
             gl.beginDrawing();
             setup(gl,w,h);
-            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else if(scene==6)sync(g,gl,w,h);else colours(gl,w,h);
+            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else if(scene==6)sync(g,gl,w,h);else if(scene==7)changes(gl,w,h);else colours(gl,w,h);
             gl.glViewport(0,0,w,h);
             gl.endDrawing();
             // 2D over the 3D.
@@ -71,6 +72,39 @@ public class TestOgl extends IApplication {
                 new float[]{.9f,.4f,0,1, .9f,.4f,0,1, .9f,.4f,0,1});
             g.drawImage(offscreen,150,160);
             image.endDrawing();
+        }
+        /** A 2x2 texture of one opaque colour. */
+        void solid(GraphicsOGL gl,int name,int r,int g,int b) {
+            byte[] data=new byte[16];for(int i=0;i<4;i++){data[i*4]=(byte)r;data[i*4+1]=(byte)g;data[i*4+2]=(byte)b;data[i*4+3]=(byte)255;}
+            gl.glBindTexture(GraphicsOGL.GL_TEXTURE_2D,name);
+            gl.glTexImage2D(GraphicsOGL.GL_TEXTURE_2D,0,GraphicsOGL.GL_RGBA,2,2,0,GraphicsOGL.GL_RGBA,GraphicsOGL.GL_UNSIGNED_BYTE,
+                buffers.allocateByteBuffer(data));
+            gl.glTexParameteri(GraphicsOGL.GL_TEXTURE_2D,GraphicsOGL.GL_TEXTURE_MIN_FILTER,GraphicsOGL.GL_NEAREST);
+            gl.glTexParameteri(GraphicsOGL.GL_TEXTURE_2D,GraphicsOGL.GL_TEXTURE_MAG_FILTER,GraphicsOGL.GL_NEAREST);
+        }
+        void changes(GraphicsOGL gl,int w,int h) {
+            gl.glEnable(GraphicsOGL.GL_TEXTURE_2D);gl.glEnableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            gl.glTexEnvi(GraphicsOGL.GL_TEXTURE_ENV,GraphicsOGL.GL_TEXTURE_ENV_MODE,GraphicsOGL.GL_REPLACE);
+            gl.glTexCoordPointer(2,GraphicsOGL.GL_FLOAT,0,floats(0,0, 1,0, 0,1, 1,1));
+            gl.glColorPointer(4,GraphicsOGL.GL_FLOAT,0,floats(1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1));
+            int[] name=new int[1];gl.glGenTextures(1,name);
+            // A quad drawn with red contents keeps them after the texture turns green in the same section.
+            solid(gl,name[0],220,30,30);
+            FloatBuffer vertices=floats(-.9f,-.9f,0, -.5f,-.9f,0, -.9f,-.3f,0, -.5f,-.3f,0);
+            gl.glVertexPointer(3,GraphicsOGL.GL_FLOAT,0,vertices);gl.glDrawArrays(GraphicsOGL.GL_TRIANGLE_STRIP,0,4);
+            solid(gl,name[0],30,200,60);
+            // The same vertex array refilled for two more quads: the recorded draw keeps its place.
+            vertices.put(0,new float[]{-.3f,-.9f,0, .1f,-.9f,0, -.3f,-.3f,0, .1f,-.3f,0});gl.glDrawArrays(GraphicsOGL.GL_TRIANGLE_STRIP,0,4);
+            vertices.put(0,new float[]{.3f,-.9f,0, .7f,-.9f,0, .3f,-.3f,0, .7f,-.3f,0});gl.glDrawArrays(GraphicsOGL.GL_TRIANGLE_STRIP,0,4);
+            // A deleted texture and a new one in its place.
+            gl.glDeleteTextures(1,name);gl.glGenTextures(1,name);solid(gl,name[0],40,80,230);
+            vertices.put(0,new float[]{.75f,-.9f,0, .95f,-.9f,0, .75f,-.3f,0, .95f,-.3f,0});gl.glDrawArrays(GraphicsOGL.GL_TRIANGLE_STRIP,0,4);
+            gl.glDeleteTextures(1,name);
+            gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            // A viewport reaching past the left and top edges, as a camera offset may.
+            gl.glViewport(-w/2,h/2,w,h);
+            shape(gl,GraphicsOGL.GL_TRIANGLES,GraphicsOGL.GL_SMOOTH,new float[]{.2f,-.6f,0, .9f,-.6f,0, .55f,0,0},
+                new float[]{1,.6f,0,1, 1,.6f,0,1, 1,.6f,0,1});
         }
         void colours(GraphicsOGL gl,int w,int h) {
             // Top left: colours blend across a smooth triangle.

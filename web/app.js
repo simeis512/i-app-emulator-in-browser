@@ -251,7 +251,8 @@ async function start() {
       if(polling)return;polling=true;
       try {
         const [state,log]=await javaCall(async()=>[await runtime.getStatus(),await runtime.getLog()]);
-        if(state.startsWith('ERROR:'))status(`未対応の処理で停止: ${state.slice(7)}`,true);
+        if(gl3d.lost)status('WebGL2 の描画が失われました。ページを再読み込みしてください。',true);
+        else if(state.startsWith('ERROR:'))status(`未対応の処理で停止: ${state.slice(7)}`,true);
         else if(state==='TERMINATED')status('アプリが終了しました。再起動できます。');
         else status(frames?'実行中 · 操作キーで進めてください。':'起動処理中…');
         if(state==='TERMINATED'||state.startsWith('ERROR:')){audio?.stopAll();haptics.stop();}

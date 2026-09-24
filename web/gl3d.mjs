@@ -78,7 +78,7 @@ void main(){
 }`;
 
 export function createGl3d(documentRef=globalThis.document) {
-  let gl=null,tried=false,program,vao,vertexBuffer,colorBuffer,scratch=new Uint8Array(0),uniforms,blank;
+  let gl=null,tried=false,lost=false,program,vao,vertexBuffer,colorBuffer,scratch=new Uint8Array(0),uniforms,blank;
   const targets=[],surfaces=[],textures=new Map();
   // Call counts, so tests can tell that frames really go through the GPU and how often data crosses over.
   const stats={uploads:0,batches:0,draws:0,clears:0,readbacks:0,textures:0};
@@ -88,6 +88,9 @@ export function createGl3d(documentRef=globalThis.document) {
     const canvas=documentRef?.createElement?.('canvas');
     gl=canvas?.getContext('webgl2',{alpha:true,antialias:false,depth:false,premultipliedAlpha:false,preserveDrawingBuffer:false})||null;
     if(!gl)return null;
+    // A lost context takes every texture, framebuffer and depth buffer with it; the page reports it rather than
+    // letting frames silently stop changing.
+    canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;console.error('WebGL2 context lost');});
     const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
       if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error('WebGL2 shader: '+gl.getShaderInfoLog(s));return s;};
     program=gl.createProgram();
@@ -196,6 +199,7 @@ export function createGl3d(documentRef=globalThis.document) {
   }
   return {
     get active(){return gl!==null;},
+    get lost(){return lost;},
     stats:()=>({...stats}),
     natives:{
       Java_p905i_web_WebGl_available(lib){try{return context()!==null;}catch(error){console.error(error);gl=null;return false;}},
@@ -218,6 +222,7 @@ export function createGl3d(documentRef=globalThis.document) {
       Java_p905i_web_WebGl_upload(lib,target,argb,width,height){upload(target,argb,width,height);},
       Java_p905i_web_WebGl_readback(lib,surface,argb,width,height){readback(surface,argb,width,height);},
       Java_p905i_web_WebGl_texture(lib,key,argb,width,height){texture(key,argb,width,height);},
+      Java_p905i_web_WebGl_deleteTexture(lib,key){const t=textures.get(key);if(t){gl.deleteTexture(t.texture);textures.delete(key);}},
       Java_p905i_web_WebGl_draw(lib,surface,vertices,colors,vertexCount,commands,commandCount,floats){
         draw(surface,vertices,colors,vertexCount,commands,commandCount,floats);
       },

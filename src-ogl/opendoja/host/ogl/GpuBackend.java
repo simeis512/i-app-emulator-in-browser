@@ -30,6 +30,8 @@ final class GpuBackend {
     /** GPU texture key and the upload revision it holds, per texture object; textures are shared by all renderers. */
     private static final Map<OglRenderer.OglTexture, int[]> textures = new IdentityHashMap<>();
     private static int nextTexture;
+    /** GPU textures of deleted texture objects, freed once no recorded draw can still use them. */
+    private static final java.util.List<Integer> retired = new java.util.ArrayList<>();
 
     /** Null unless the page asked for the experimental renderer and WebGL2 is there. */
     static GpuBackend create(OglRenderer renderer) {
@@ -123,6 +125,22 @@ final class GpuBackend {
         flush();
         section = false;
         uploadedVersion = -1;
+        freeRetired();
+    }
+
+    /** A texture object was deleted; a later texture with the same name is a new object with a new key. */
+    static void forget(OglRenderer.OglTexture texture) {
+        int[] known = textures.remove(texture);
+        if (known != null) retired.add(known[0]);
+    }
+
+    private static void freeRetired() {
+        if (retired.isEmpty()) return;
+        synchronized (pictures) {
+            for (Picture picture : pictures.values()) if (picture.pending != null) return;
+        }
+        for (int key : retired) WebGl.deleteTexture(key);
+        retired.clear();
     }
 
     /** Sends what is recorded. Readback happens only when the section ends or the CPU is about to use the picture. */

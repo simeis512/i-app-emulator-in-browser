@@ -410,6 +410,8 @@ async function main() {
         points:[[10,8],[120,20],[48,48],[48,108],[48,168],[120,48],[120,108],[120,168],[192,48],[192,108],[192,168],[210,219]]},
       {key:'6',name:'2D, pixel reads, a second Graphics and an image copy inside 3D sections',
         points:[[24,36],[45,45],[70,75],[78,30],[205,15],[144,36],[186,84],[216,96],[182,190],[152,162]]},
+      {key:'7',name:'textures and vertex arrays changed after use, a deleted texture and a viewport past the edges',
+        points:[[36,192],[108,192],[180,192],[222,192],[66,48],[150,100]]},
     ];
     const pictures={ogl:[],webgl:[]},logs={};
     for(const mode of ['ogl','webgl']) {
