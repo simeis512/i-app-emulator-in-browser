@@ -21,6 +21,9 @@ final class GpuBackend {
     private static int enabled = -1;
     private static final Map<BufferedImage, Integer> targets = new IdentityHashMap<>();
     private static final Set<String> noticed = new HashSet<>();
+    /** GPU texture key and the upload revision it holds, per texture object; textures are shared by all renderers. */
+    private static final Map<OglRenderer.OglTexture, int[]> textures = new IdentityHashMap<>();
+    private static int nextTexture;
 
     /** Null unless the page asked for the experimental renderer and WebGL2 is there. */
     static GpuBackend create(OglRenderer renderer) {
@@ -128,7 +131,7 @@ final class GpuBackend {
         prepare();
         capture(clip);
         OglRenderer.OglState ogl = renderer.oglState();
-        if (ogl.textureEnabled()) notice("textures are not drawn yet");
+        if (ogl.textureEnabled() && ogl.textureEnvMode == GraphicsOGL.GL_COMBINE) notice("GL_COMBINE is drawn as GL_MODULATE");
         if (ogl.blendCapEnabled) notice("blending is not applied yet");
         if (ogl.alphaTestEnabled) notice("the alpha test is not applied yet");
         if (renderer.fogEnabled()) notice("fog is not drawn");
@@ -203,6 +206,31 @@ final class GpuBackend {
         state[14] = ogl.depthMask ? 1 : 0;
         stateFloats[1] = ogl.depthRangeNear;
         stateFloats[2] = ogl.depthRangeFar;
+        OglRenderer.OglTexture texture = ogl.textureEnabled() ? ogl.boundTexture() : null;
+        if (texture != null) {
+            boolean empty = texture.pixels.length == 0 || texture.width <= 0 || texture.height <= 0;
+            state[18] = 1;
+            state[19] = empty ? -1 : textureKey(texture);
+            state[20] = texture.width;
+            state[21] = texture.height;
+            state[22] = (texture.minFilter == GraphicsOGL.GL_LINEAR || texture.magFilter == GraphicsOGL.GL_LINEAR ? 1 : 0)
+                    | (texture.wrapS == GraphicsOGL.GL_CLAMP_TO_EDGE ? 2 : 0) | (texture.wrapT == GraphicsOGL.GL_CLAMP_TO_EDGE ? 4 : 0);
+            state[23] = ogl.textureEnvMode;
+            state[24] = texture.baseFormat();
+            state[25] = ogl.textureEnvColor;
+        }
+    }
+
+    /** Uploads a texture when its contents changed; draws already recorded used the old contents, so they go first. */
+    private int textureKey(OglRenderer.OglTexture texture) {
+        int[] known = textures.get(texture);
+        if (known == null) textures.put(texture, known = new int[]{nextTexture++, -1});
+        if (known[1] != texture.uploadRevision()) {
+            if (commandCount > 0) submit();
+            WebGl.texture(known[0], texture.pixels, texture.width, texture.height);
+            known[1] = texture.uploadRevision();
+        }
+        return known[0];
     }
 
     private void command(int type, int first, int count) {

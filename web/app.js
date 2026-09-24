@@ -241,7 +241,7 @@ async function start() {
     runtime=await lib.p905i.web.BrowserRuntime;
     $('log').textContent=application.warning;
     await javaCall(()=>runtime.start('/str/app.jar','/str/app.jam','/str/app.sp',`/files/iapp/${application.id}`,canvas.width,canvas.height,true));
-    window.iapp={get frames(){return frames;},id:application.id,renderer:webgl?'webgl':ogl?'ogl':'2d',
+    window.iapp={get frames(){return frames;},id:application.id,renderer:webgl?'webgl':ogl?'ogl':'2d',gl3dStats:()=>gl3d.stats(),
       audioStats:()=>audio?.stats(),
       getStatus:()=>javaCall(()=>runtime.getStatus()),
       exportScratchpad:()=>javaCall(()=>runtime.exportScratchpad())};

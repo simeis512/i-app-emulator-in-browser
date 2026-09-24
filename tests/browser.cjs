@@ -400,11 +400,15 @@ async function main() {
       {key:'1',name:'colours, shading, clipping and viewports',points:[[10,8],[120,20],[60,76],[180,60],[180,170],[20,190],[120,230]]},
       {key:'2',name:'depth tests, depth writes and clears',
         points:[[36,30],[90,90],[120,108],[48,66],[78,66],[150,90],[174,66],[204,36],[36,204],[78,162],[175,205],[120,20]]},
+      {key:'3',name:'texture formats, filters, wraps, functions and perspective',
+        points:[[30,60],[90,60],[150,60],[210,60],[30,174],[90,174],[150,150]]},
     ];
     const pictures={ogl:[],webgl:[]},logs={};
     for(const mode of ['ogl','webgl']) {
       const tab=await browser.newPage({viewport:{width:1200,height:1000}});const failures=[];
       tab.on('pageerror',error=>failures.push(String(error)));
+      // A refused GL call only shows as a console warning, and its draw is silently missing.
+      tab.on('console',message=>{if(/GL_INVALID|WebGL:/.test(message.text()))failures.push(message.text());});
       await tab.goto(baseURL);await tab.locator('#renderer').selectOption(mode);
       await tab.locator('#files').setInputFiles(['jar','jam'].map(ext=>path.join(root,'build/fixture/ogl.'+ext)));
       await tab.locator('#start').click();
@@ -415,6 +419,16 @@ async function main() {
         await tab.waitForFunction(count=>iapp.frames>=count+3,before);
         pictures[mode].push(await tab.evaluate(()=>{const c=document.querySelector('#screen');
           return {width:c.width,data:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)};}));
+      }
+      if(mode==='webgl') {
+        // In steady state each frame is one 3D section: one upload, one batch and one readback.
+        const [before,frames0]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
+        await tab.waitForFunction(count=>iapp.frames>=count+6,frames0);
+        const [after,frames1]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
+        const sections=after.readbacks-before.readbacks;
+        assert.ok(Math.abs(sections-(frames1-frames0))<=1,`${sections} readbacks for ${frames1-frames0} frames`);
+        assert.equal(after.uploads-before.uploads,sections);assert.equal(after.batches-before.batches,sections);
+        assert.ok(after.textures>=5&&after.draws>0,'textures reached the GPU');
       }
       // The log panel refreshes once a second.
       await tab.waitForFunction(line=>document.querySelector('#log').textContent.includes(line),

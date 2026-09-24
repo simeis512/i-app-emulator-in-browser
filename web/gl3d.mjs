@@ -10,17 +10,64 @@ layout(location=2) in vec4 color;
 out vec4 vColor;
 out vec2 vUv;
 void main(){gl_Position=position;vColor=color.zyxw*255.0;vUv=uv;}`;
-// Colours are interpolated on the 0..255 scale and rounded as the software rasteriser does.
+// Colours are interpolated on the 0..255 scale and rounded as the software rasteriser does. Textures are read with
+// texelFetch to reproduce its sampler: wrap, then scale by size - 1, round to the nearest texel or weigh four texels in
+// 256ths. MODULATE is integer arithmetic as in software; the other functions follow its float formulas.
 const FRAGMENT=`#version 300 es
 precision highp float;
+precision highp int;
+uniform sampler2D tex;
+uniform int textured, texKey, texFlags, envMode, baseFormat, envColor;
+uniform ivec2 texSize;
 in vec4 vColor;
 in vec2 vUv;
 out vec4 fragment;
-void main(){fragment=clamp(floor(vColor+0.5),0.0,255.0)/255.0;}`;
+const int ALPHA=6406,RGB=6407,LUMINANCE=6409,MODULATE=8448,REPLACE=7681,DECAL=8449,BLEND=3042,ADD=260;
+float wrap(float v,bool edge){if(edge)return clamp(v,0.0,1.0);float f=v-floor(v);return f<0.0?f+1.0:f;}
+int near(float v){return int(floor(v+0.5));}
+ivec4 texel(int x,int y){return ivec4(floor(texelFetch(tex,ivec2(x,y),0)*255.0+0.5));}
+ivec4 sampleTexture(vec2 uv){
+  if(texKey<0)return ivec4(255);
+  float su=wrap(uv.x,(texFlags&2)!=0),sv=wrap(uv.y,(texFlags&4)!=0);
+  int w=texSize.x,h=texSize.y;
+  if((texFlags&1)==0)return texel(clamp(near(su*float(w-1)),0,w-1),clamp(near(sv*float(h-1)),0,h-1));
+  float bx=su*float(w-1),by=sv*float(h-1);
+  int x0=clamp(int(bx),0,w-1),y0=clamp(int(by),0,h-1),x1=x0+1<w?x0+1:x0,y1=y0+1<h?y0+1:y0;
+  int tx=clamp(near((bx-float(x0))*256.0),0,256),ty=clamp(near((by-float(y0))*256.0),0,256);
+  return ((texel(x0,y0)*((256-tx)*(256-ty))+texel(x1,y0)*(tx*(256-ty))+texel(x0,y1)*((256-tx)*ty)+texel(x1,y1)*(tx*ty))+32768)>>16;
+}
+ivec4 pack(vec4 c){return ivec4(floor(clamp(c,0.0,1.0)*255.0+0.5));}
+void main(){
+  ivec4 p=clamp(ivec4(floor(vColor+0.5)),0,255);
+  if(textured!=0){
+    ivec4 s=sampleTexture(vUv);
+    if(envMode==MODULATE){
+      if(baseFormat!=LUMINANCE&&baseFormat!=RGB)p.a=(p.a*s.a+127)/255;
+      if(baseFormat!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;
+    }else{
+      vec4 pf=vec4(p)/255.0,sf=vec4(s)/255.0,t=sf;
+      if(baseFormat==ALPHA)t.rgb=vec3(0.0);
+      else if(baseFormat==LUMINANCE||baseFormat==6410)t.rgb=vec3(sf.r);
+      if(baseFormat==LUMINANCE||baseFormat==RGB)t.a=1.0;
+      vec3 e=vec3((envColor>>16)&255,(envColor>>8)&255,envColor&255)/255.0;
+      bool rgbOnly=baseFormat==LUMINANCE||baseFormat==RGB;
+      vec4 c=pf;
+      if(envMode==REPLACE){c=vec4(baseFormat==ALPHA?pf.rgb:t.rgb,rgbOnly?pf.a:t.a);}
+      else if(envMode==DECAL){if(baseFormat==RGB)c=vec4(t.rgb,pf.a);else if(baseFormat==6408)c=vec4(pf.rgb*(1.0-t.a)+t.rgb*t.a,pf.a);}
+      else if(envMode==BLEND){c=vec4(baseFormat==ALPHA?pf.rgb:pf.rgb*(1.0-t.rgb)+e*t.rgb,rgbOnly?pf.a:pf.a*t.a);}
+      else if(envMode==ADD){c=vec4(baseFormat==ALPHA?pf.rgb:pf.rgb+t.rgb,rgbOnly?pf.a:pf.a*t.a);}
+      else{if(baseFormat!=LUMINANCE&&baseFormat!=RGB)p.a=(p.a*s.a+127)/255;if(baseFormat!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;c=vec4(p)/255.0;}
+      p=pack(c);
+    }
+  }
+  fragment=vec4(p)/255.0;
+}`;
 
 export function createGl3d(documentRef=globalThis.document) {
-  let gl=null,tried=false,program,vao,vertexBuffer,colorBuffer,scratch=new Uint8Array(0);
-  const targets=[],surfaces=[];
+  let gl=null,tried=false,program,vao,vertexBuffer,colorBuffer,scratch=new Uint8Array(0),uniforms,blank;
+  const targets=[],surfaces=[],textures=new Map();
+  // Call counts, so tests can tell that frames really go through the GPU and how often data crosses over.
+  const stats={uploads:0,batches:0,draws:0,clears:0,readbacks:0,textures:0};
   function context() {
     if(tried)return gl;
     tried=true;
@@ -40,6 +87,12 @@ export function createGl3d(documentRef=globalThis.document) {
     colorBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,4,gl.UNSIGNED_BYTE,true,4,0);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);gl.pixelStorei(gl.PACK_ALIGNMENT,1);
+    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize']
+      .map(name=>[name,gl.getUniformLocation(program,name)]));
+    gl.useProgram(program);gl.uniform1i(uniforms.tex,0);
+    // Unit 0 must never be left holding a picture texture: sampling the texture being drawn into is refused.
+    blank=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,blank);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
     return gl;
   }
   // Java ARGB integers, top row first, become RGBA bytes with the bottom row first, and back.
@@ -55,11 +108,28 @@ export function createGl3d(documentRef=globalThis.document) {
     return scratch.subarray(0,n*4);
   }
   function upload(target,argb,width,height) {
+    stats.uploads++;
     const t=targets[target];
     gl.bindTexture(gl.TEXTURE_2D,t.texture);
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,width,height,gl.RGBA,gl.UNSIGNED_BYTE,swap(argb,width,height,true));
+    gl.bindTexture(gl.TEXTURE_2D,blank);
+  }
+  // Texture rows go up with t, as the software sampler indexes them, so they are stored unflipped.
+  function texture(key,argb,width,height) {
+    stats.textures++;
+    const n=width*height;if(scratch.length<n*4)scratch=new Uint8Array(n*4);
+    const rgba=new Uint32Array(scratch.buffer,0,n);
+    for(let i=0;i<n;i++){const p=argb[i];rgba[i]=(p&0xff00ff00)|((p>>>16)&0xff)|((p&0xff)<<16);}
+    let t=textures.get(key);
+    if(!t||t.width!==width||t.height!==height){if(t)gl.deleteTexture(t.texture);
+      t={texture:gl.createTexture(),width,height};textures.set(key,t);gl.bindTexture(gl.TEXTURE_2D,t.texture);
+      gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,width,height);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);}
+    gl.bindTexture(gl.TEXTURE_2D,t.texture);
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,width,height,gl.RGBA,gl.UNSIGNED_BYTE,scratch.subarray(0,n*4));
   }
   function readback(surface,argb,width,height) {
+    stats.readbacks++;
     const s=surfaces[surface];
     gl.bindFramebuffer(gl.FRAMEBUFFER,s.framebuffer);
     const n=width*height;if(scratch.length<n*4)scratch=new Uint8Array(n*4);
@@ -67,6 +137,7 @@ export function createGl3d(documentRef=globalThis.document) {
     swap(argb,width,height,false);
   }
   function draw(surface,vertices,colors,vertexCount,commands,commandCount,floats) {
+    stats.batches++;
     const s=surfaces[surface];
     gl.bindFramebuffer(gl.FRAMEBUFFER,s.framebuffer);
     gl.useProgram(program);gl.bindVertexArray(vao);
@@ -85,21 +156,31 @@ export function createGl3d(documentRef=globalThis.document) {
         if(commands[o+12]){gl.enable(gl.DEPTH_TEST);gl.depthFunc(commands[o+13]);gl.depthMask(commands[o+14]===1);}
         else gl.disable(gl.DEPTH_TEST);
         gl.depthRange(floats[c*FLOATS+1],floats[c*FLOATS+2]);
-        gl.drawArrays(gl.TRIANGLES,commands[o+1],commands[o+2]);
+        const textured=commands[o+18],key=commands[o+19];
+        gl.uniform1i(uniforms.textured,textured);
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,textured&&key>=0?textures.get(key).texture:blank);
+        if(textured){
+          gl.uniform1i(uniforms.texKey,key);gl.uniform2i(uniforms.texSize,commands[o+20],commands[o+21]);
+          gl.uniform1i(uniforms.texFlags,commands[o+22]);gl.uniform1i(uniforms.envMode,commands[o+23]);
+          gl.uniform1i(uniforms.baseFormat,commands[o+24]);gl.uniform1i(uniforms.envColor,commands[o+25]);
+        }
+        gl.drawArrays(gl.TRIANGLES,commands[o+1],commands[o+2]);stats.draws++;
       }else if(commands[o]===CLEAR_DEPTH){
         // As in software, a depth clear resets the whole buffer whatever the viewport or clip.
-        gl.disable(gl.SCISSOR_TEST);gl.depthMask(true);gl.clearDepth(1);gl.clear(gl.DEPTH_BUFFER_BIT);
+        gl.disable(gl.SCISSOR_TEST);gl.depthMask(true);gl.clearDepth(1);gl.clear(gl.DEPTH_BUFFER_BIT);stats.clears++;
       }
     }
   }
   return {
     get active(){return gl!==null;},
+    stats:()=>({...stats}),
     natives:{
       Java_p905i_web_WebGl_available(lib){try{return context()!==null;}catch(error){console.error(error);gl=null;return false;}},
       Java_p905i_web_WebGl_target(lib,width,height){
         const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
         gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,width,height);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+        gl.bindTexture(gl.TEXTURE_2D,blank);
         targets.push({texture,width,height});return targets.length-1;
       },
       Java_p905i_web_WebGl_surface(lib,target){
@@ -113,6 +194,7 @@ export function createGl3d(documentRef=globalThis.document) {
       },
       Java_p905i_web_WebGl_upload(lib,target,argb,width,height){upload(target,argb,width,height);},
       Java_p905i_web_WebGl_readback(lib,surface,argb,width,height){readback(surface,argb,width,height);},
+      Java_p905i_web_WebGl_texture(lib,key,argb,width,height){texture(key,argb,width,height);},
       Java_p905i_web_WebGl_draw(lib,surface,vertices,colors,vertexCount,commands,commandCount,floats){
         draw(surface,vertices,colors,vertexCount,commands,commandCount,floats);
       },
