@@ -2,7 +2,7 @@
 // Experimental WebGL2 renderer for the OpenGL ES bridge. Java still fetches, transforms, lights and clips; it hands
 // over clip-space triangles with one state record per draw call, a 3D section at a time. Colour is one texture per
 // image, shared by the Graphics drawing on it; each Graphics draws through its own framebuffer and depth buffer.
-const COMMAND=26, DRAW=1, CLEAR_DEPTH=2, FLOATS=4;
+const COMMAND=36, DRAW=1, CLEAR_DEPTH=2, FLOATS=4;
 const VERTEX=`#version 300 es
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
@@ -17,7 +17,9 @@ const FRAGMENT=`#version 300 es
 precision highp float;
 precision highp int;
 uniform sampler2D tex;
-uniform int textured, texKey, texFlags, envMode, baseFormat, envColor;
+uniform int textured, texKey, texFlags, envMode, baseFormat, envColor, alphaTest;
+// The software alpha test as 256 pass bits, one per alpha byte, so no GPU division decides a boundary.
+uniform int alphaBits[8];
 uniform ivec2 texSize;
 in vec4 vColor;
 in vec2 vUv;
@@ -60,6 +62,7 @@ void main(){
       p=pack(c);
     }
   }
+  if(alphaTest!=0&&((alphaBits[p.a>>5]>>(p.a&31))&1)==0)discard;
   fragment=vec4(p)/255.0;
 }`;
 
@@ -87,8 +90,8 @@ export function createGl3d(documentRef=globalThis.document) {
     colorBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,4,gl.UNSIGNED_BYTE,true,4,0);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);gl.pixelStorei(gl.PACK_ALIGNMENT,1);
-    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize']
-      .map(name=>[name,gl.getUniformLocation(program,name)]));
+    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize','alphaTest','alphaBits']
+      .map(name=>[name,gl.getUniformLocation(program,name==='alphaBits'?'alphaBits[0]':name)]));
     gl.useProgram(program);gl.uniform1i(uniforms.tex,0);
     // Unit 0 must never be left holding a picture texture: sampling the texture being drawn into is refused.
     blank=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,blank);
@@ -144,7 +147,7 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer);gl.bufferData(gl.ARRAY_BUFFER,vertices.subarray(0,vertexCount*6),gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(colors.buffer,colors.byteOffset,vertexCount*4),gl.STREAM_DRAW);
-    gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
     for(let c=0;c<commandCount;c++){
       const o=c*COMMAND;
       if(commands[o]===DRAW){
@@ -156,6 +159,10 @@ export function createGl3d(documentRef=globalThis.document) {
         if(commands[o+12]){gl.enable(gl.DEPTH_TEST);gl.depthFunc(commands[o+13]);gl.depthMask(commands[o+14]===1);}
         else gl.disable(gl.DEPTH_TEST);
         gl.depthRange(floats[c*FLOATS+1],floats[c*FLOATS+2]);
+        // GPU blending rounds its own way; the software path rounds integer sums, so results may differ by a level.
+        if(commands[o+15]){gl.enable(gl.BLEND);gl.blendFunc(commands[o+16],commands[o+17]);}else gl.disable(gl.BLEND);
+        gl.uniform1i(uniforms.alphaTest,commands[o+26]);
+        if(commands[o+26])gl.uniform1iv(uniforms.alphaBits,commands.subarray(o+28,o+36));
         const textured=commands[o+18],key=commands[o+19];
         gl.uniform1i(uniforms.textured,textured);
         gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,textured&&key>=0?textures.get(key).texture:blank);

@@ -312,7 +312,8 @@ def build():
             for old,new in [
                 ('        ogl.viewportHeight = host.surface().height();\n    }\n',
                  '        ogl.viewportHeight = host.surface().height();\n        gpu = GpuBackend.create(this);\n    }\n\n'
-                 '    private final GpuBackend gpu;\n\n    boolean fogEnabled() {\n        return fog.enabled;\n    }\n'),
+                 '    private final GpuBackend gpu;\n\n    boolean fogEnabled() {\n        return fog.enabled;\n    }\n\n'
+                 '    boolean[] alphaPassForGpu() {\n        return ogl.alphaTestEnabled ? alphaPassTable() : null;\n    }\n'),
                 ('    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n',
                  '    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n    if (gpu != null) {\n        gpu.begin();\n    }\n'),
                 ('    ogl.endDrawing();\n    /* Native backend excluded; using software renderer. */\n',

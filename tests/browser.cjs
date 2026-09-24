@@ -402,6 +402,9 @@ async function main() {
         points:[[36,30],[90,90],[120,108],[48,66],[78,66],[150,90],[174,66],[204,36],[36,204],[78,162],[175,205],[120,20]]},
       {key:'3',name:'texture formats, filters, wraps, functions and perspective',
         points:[[30,60],[90,60],[150,60],[210,60],[30,174],[90,174],[150,150]]},
+      // GPU blending rounds its own way where software rounds integer sums, so blended colours may be a level off.
+      {key:'4',name:'alpha tests and blending',tolerance:2,
+        points:[[10,95],[22,74],[38,46],[82,74],[98,46],[138,60],[174,60],[216,60],[18,180],[54,180],[90,180],[150,180],[210,180]]},
     ];
     const pictures={ogl:[],webgl:[]},logs={};
     for(const mode of ['ogl','webgl']) {
@@ -440,7 +443,8 @@ async function main() {
     const at=(p,x,y)=>p.data.slice((y*p.width+x)*4,(y*p.width+x)*4+3);
     scenes.forEach((scene,i)=>{
       const soft=pictures.ogl[i],gpu=pictures.webgl[i];
-      for(const [x,y] of scene.points)assert.deepEqual(at(gpu,x,y),at(soft,x,y),`scene ${scene.key}, pixel ${x},${y}`);
+      for(const [x,y] of scene.points){const a=at(soft,x,y),b=at(gpu,x,y);
+        assert.ok(a.every((v,c)=>Math.abs(v-b[c])<=(scene.tolerance||0)),`scene ${scene.key}, pixel ${x},${y}: ${a} against ${b}`);}
       let edges=0;
       for(let k=0;k<soft.data.length;k+=4)
         if(Math.max(...[0,1,2].map(c=>Math.abs(soft.data[k+c]-gpu.data[k+c])))>2)edges++;

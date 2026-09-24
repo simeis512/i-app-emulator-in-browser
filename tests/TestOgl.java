@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
-// Keys 1 to 3 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures.
+// Keys 1 to 4 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
 
@@ -12,7 +12,7 @@ public class TestOgl extends IApplication {
         volatile int scene=1;
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
-            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_3)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_4)scene=key-Display.KEY_0;
         }
         FloatBuffer floats(float... values) { return buffers.allocateFloatBuffer(values); }
         void shape(GraphicsOGL gl,int mode,int shade,float[] vertices,float[] colors) {
@@ -38,7 +38,7 @@ public class TestOgl extends IApplication {
             gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
             gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisable(GraphicsOGL.GL_DEPTH_TEST);gl.glDisable(GraphicsOGL.GL_CULL_FACE);
             gl.glEnableClientState(GraphicsOGL.GL_VERTEX_ARRAY);gl.glEnableClientState(GraphicsOGL.GL_COLOR_ARRAY);
-            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else colours(gl,w,h);
+            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else colours(gl,w,h);
             gl.glViewport(0,0,w,h);
             gl.endDrawing();
             // 2D over the 3D.
@@ -140,6 +140,39 @@ public class TestOgl extends IApplication {
             shape(gl,GraphicsOGL.GL_TRIANGLE_STRIP,GraphicsOGL.GL_SMOOTH,new float[]{.06f,-.09f,-.12f, .09f,-.09f,-.12f, .065f,-.02f,-.6f, .085f,-.02f,-.6f},
                 new float[]{1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1});
             gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+        }
+        void tinted(GraphicsOGL gl,float x0,float y0,float x1,float y1,float r,float g,float b,float a) {
+            shape(gl,GraphicsOGL.GL_TRIANGLE_STRIP,GraphicsOGL.GL_SMOOTH,new float[]{x0,y0,0, x1,y0,0, x0,y1,0, x1,y1,0},
+                new float[]{r,g,b,a, r,g,b,a, r,g,b,a, r,g,b,a});
+        }
+        void blending(GraphicsOGL gl,int w,int h) {
+            if(names==null)makeTextures(gl);
+            // Top left: the checker's clear texel cut out by NOTEQUAL 0, then its half-clear one too by GREATER 0.6.
+            gl.glEnable(GraphicsOGL.GL_TEXTURE_2D);gl.glEnableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            gl.glEnable(GraphicsOGL.GL_ALPHA_TEST);gl.glAlphaFunc(GraphicsOGL.GL_NOTEQUAL,0);
+            textured(gl,0,GraphicsOGL.GL_NEAREST,GraphicsOGL.GL_REPEAT,GraphicsOGL.GL_MODULATE,-.95f,.15f,-.55f,.85f,0,1);
+            gl.glAlphaFunc(GraphicsOGL.GL_GREATER,.6f);
+            textured(gl,0,GraphicsOGL.GL_NEAREST,GraphicsOGL.GL_REPEAT,GraphicsOGL.GL_MODULATE,-.45f,.15f,-.05f,.85f,0,1);
+            gl.glDisable(GraphicsOGL.GL_ALPHA_TEST);gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);
+            gl.glDisableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            gl.glEnable(GraphicsOGL.GL_BLEND);
+            // Top right: two half-clear quads over the background and each other.
+            gl.glBlendFunc(GraphicsOGL.GL_SRC_ALPHA,GraphicsOGL.GL_ONE_MINUS_SRC_ALPHA);
+            tinted(gl,.05f,.15f,.6f,.85f, 1,.2f,.2f,.5f);
+            tinted(gl,.3f,.15f,.95f,.85f, .2f,1,.4f,.5f);
+            // Bottom left: additive light.
+            gl.glBlendFunc(GraphicsOGL.GL_ONE,GraphicsOGL.GL_ONE);
+            tinted(gl,-.95f,-.85f,-.4f,-.15f, .5f,.2f,.1f,1);
+            tinted(gl,-.7f,-.85f,-.15f,-.15f, .1f,.3f,.5f,1);
+            // Bottom middle: premultiplied-style translucency.
+            gl.glBlendFunc(GraphicsOGL.GL_ONE,GraphicsOGL.GL_ONE_MINUS_SRC_ALPHA);
+            tinted(gl,.05f,-.85f,.45f,-.15f, .3f,.1f,.2f,.4f);
+            // Bottom right: an opaque quad multiplied by a second one.
+            gl.glDisable(GraphicsOGL.GL_BLEND);
+            tinted(gl,.55f,-.85f,.95f,-.15f, .9f,.8f,.3f,1);
+            gl.glEnable(GraphicsOGL.GL_BLEND);gl.glBlendFunc(GraphicsOGL.GL_DST_COLOR,GraphicsOGL.GL_ZERO);
+            tinted(gl,.6f,-.8f,.9f,-.2f, .5f,1,.6f,1);
+            gl.glDisable(GraphicsOGL.GL_BLEND);
         }
         public void run() {try{while(true){repaint();Thread.sleep(100);}}catch(Exception e){throw new RuntimeException(e);}}
     }

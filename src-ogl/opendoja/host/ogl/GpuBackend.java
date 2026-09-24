@@ -16,7 +16,7 @@ import p905i.web.WebGl;
  * with the state of its draw call, and a 3D section goes to the browser in one batch. Colour is one GPU texture per
  * image, shared by the renderers drawing on it; depth belongs to each renderer, as in the software path. */
 final class GpuBackend {
-    static final int COMMAND = 26, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 4;
+    static final int COMMAND = 36, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 4;
     private static final int MAX_VERTICES = 3 * 21000;
     private static int enabled = -1;
     private static final Map<BufferedImage, Integer> targets = new IdentityHashMap<>();
@@ -132,8 +132,6 @@ final class GpuBackend {
         capture(clip);
         OglRenderer.OglState ogl = renderer.oglState();
         if (ogl.textureEnabled() && ogl.textureEnvMode == GraphicsOGL.GL_COMBINE) notice("GL_COMBINE is drawn as GL_MODULATE");
-        if (ogl.blendCapEnabled) notice("blending is not applied yet");
-        if (ogl.alphaTestEnabled) notice("the alpha test is not applied yet");
         if (renderer.fogEnabled()) notice("fog is not drawn");
         drawFirst = vertexCount;
     }
@@ -206,6 +204,15 @@ final class GpuBackend {
         state[14] = ogl.depthMask ? 1 : 0;
         stateFloats[1] = ogl.depthRangeNear;
         stateFloats[2] = ogl.depthRangeFar;
+        // GPU blending rounds its own way; software rounds integer sums. The alpha test is the software table itself.
+        state[15] = ogl.blendCapEnabled ? 1 : 0;
+        state[16] = ogl.blendSrcFactor;
+        state[17] = ogl.blendDstFactor;
+        boolean[] pass = renderer.alphaPassForGpu();
+        if (pass != null) {
+            state[26] = 1;
+            for (int alpha = 0; alpha < 256; alpha++) if (pass[alpha]) state[28 + (alpha >> 5)] |= 1 << (alpha & 31);
+        }
         OglRenderer.OglTexture texture = ogl.textureEnabled() ? ogl.boundTexture() : null;
         if (texture != null) {
             boolean empty = texture.pixels.length == 0 || texture.width <= 0 || texture.height <= 0;
