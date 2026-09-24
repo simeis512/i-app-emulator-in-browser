@@ -15,4 +15,15 @@ public final class ExactMath {
         if(value > -8388608f && value < 8388608f){int whole=(int)value;if(whole > value)whole--;return (value-whole)+0f;}
         return value-(float)Math.floor(value);
     }
+    /** (int)Math.floor(value). Inside the int range truncation is exact; only negative fractions, all below 2^23 in
+     * size, need the step down. */
+    public static int floorInt(float value) {
+        if(value > -2147483648f && value < 2147483648f){int whole=(int)value;return whole > value?whole-1:whole;}
+        return (int)Math.floor(value);
+    }
+    /** (int)Math.ceil(value), by the same reasoning for positive fractions. */
+    public static int ceilInt(float value) {
+        if(value > -2147483648f && value < 2147483648f){int whole=(int)value;return whole < value?whole+1:whole;}
+        return (int)Math.ceil(value);
+    }
 }

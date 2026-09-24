@@ -62,8 +62,9 @@ public final class OglChecks {
                     :(i&4)==0?Math.nextDown(random.nextInt(1<<25)-(1<<24)+.5f):Math.nextUp(random.nextInt(1<<25)-(1<<24)+.5f);
                 if(ExactMath.round(v)!=Math.round(v))mismatches++;
                 if(Float.floatToIntBits(ExactMath.fraction(v))!=Float.floatToIntBits(v-(float)Math.floor(v)))mismatches++;
+                if(ExactMath.floorInt(v)!=(int)Math.floor(v)||ExactMath.ceilInt(v)!=(int)Math.ceil(v))mismatches++;
             }
-            require(mismatches==0,"ExactMath agrees with Math.round and Math.floor bit for bit");
+            require(mismatches==0,"ExactMath agrees with Math.round, Math.floor and Math.ceil bit for bit");
 
             // Textured drawing through every replaced call: repeated negative coordinates, nearest and linear filters,
             // colour interpolation, coordinates past 2^23 and 2^31, alpha test and fog. The checksums were taken from

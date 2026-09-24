@@ -282,6 +282,31 @@ def build():
             end=text.index('\nvoid drawLineLoop(')
             assert hashlib.sha256(text[start:end].encode('utf-8')).hexdigest()[:16]=='30b72db99885a01f','pixel loop changed upstream'
             text=text[:start]+RASTER_LOOP+text[end:]
+            # Triangle setup. A triangle inside all six clip planes leaves clipping as three copies of itself, so it is
+            # projected directly; its bounding box is rounded without Math.floor/Math.ceil.
+            for old,new in [
+                ('    RasterVertex[] input = clipInput;\n    RasterVertex[] scratch = clipScratch;\n',
+                 '    if (insideAllPlanes(v0) && insideAllPlanes(v1) && insideAllPlanes(v2)) {\n'
+                 '        rasterizeProjectedTriangle(projectClipVertex(project0, v0), projectClipVertex(project1, v1),\n'
+                 '                projectClipVertex(project2, v2), pixels, depthBuffer, clip, width, height);\n'
+                 '        return;\n    }\n'
+                 '    RasterVertex[] input = clipInput;\n    RasterVertex[] scratch = clipScratch;\n'),
+                ('private float clipDistance(RasterVertex vertex, int plane) {',
+                 'private static boolean insideAllPlanes(RasterVertex v) {\n'
+                 '    return v.clipX + v.clipW >= 0f && v.clipW - v.clipX >= 0f && v.clipY + v.clipW >= 0f\n'
+                 '            && v.clipW - v.clipY >= 0f && v.clipZ + v.clipW >= 0f && v.clipW - v.clipZ >= 0f;\n}\n\n'
+                 'private float clipDistance(RasterVertex vertex, int plane) {'),
+                ('clamp((int) Math.floor(Math.min(v0.x, Math.min(v1.x, v2.x))), 0, width - 1)',
+                 'clamp(p905i.web.ExactMath.floorInt(Math.min(v0.x, Math.min(v1.x, v2.x))), 0, width - 1)'),
+                ('clamp((int) Math.ceil(Math.max(v0.x, Math.max(v1.x, v2.x))), 0, width - 1)',
+                 'clamp(p905i.web.ExactMath.ceilInt(Math.max(v0.x, Math.max(v1.x, v2.x))), 0, width - 1)'),
+                ('clamp((int) Math.floor(Math.min(v0.y, Math.min(v1.y, v2.y))), 0, height - 1)',
+                 'clamp(p905i.web.ExactMath.floorInt(Math.min(v0.y, Math.min(v1.y, v2.y))), 0, height - 1)'),
+                ('clamp((int) Math.ceil(Math.max(v0.y, Math.max(v1.y, v2.y))), 0, height - 1)',
+                 'clamp(p905i.web.ExactMath.ceilInt(Math.max(v0.y, Math.max(v1.y, v2.y))), 0, height - 1)'),
+            ]:
+                assert text.count(old)==1,old
+                text=text.replace(old,new)
             renderer=text
         sources.append(write(rel,text))
     rel=Path('opendoja/host/DesktopSurface.java')
