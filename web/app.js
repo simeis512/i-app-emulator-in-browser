@@ -3,6 +3,7 @@ import { addFiles, prepareApplication, usesOpenGl } from './loader.mjs';
 import { BrowserAudio } from './audio.mjs';
 import { readInstrumentFile } from './instruments.mjs';
 import { BrowserHaptics } from './haptics.mjs';
+import { createGl3d } from './gl3d.mjs';
 const $ = id => document.getElementById(id);
 // CLEAR has no place in the upstream key tables; the runtime delivers it separately.
 const CLEAR = -8;
@@ -179,7 +180,7 @@ async function start() {
     await audioReady;
     status('ファイルを検証しています…');
     application=await prepareApplication(files);
-    let ogl=$('renderer').value==='ogl';
+    const webgl=$('renderer').value==='webgl';let ogl=webgl||$('renderer').value==='ogl';
     // The JVM version is fixed once per page, so choose before starting it. An unreadable archive keeps 2D.
     if($('renderer').value==='auto') {
       status('描画モードを判別しています…');
@@ -207,8 +208,10 @@ async function start() {
     if(typeof cheerpjInit!=='function') throw new Error('実行環境を取得できません。インターネット接続を確認してください。');
     booted=true;$('app-name').textContent=application.name;
     status('Java実行環境を準備しています…');
-    await cheerpjInit({version:ogl?17:8,status:'none',javaProperties:['file.encoding=Shift_JIS'],
-      natives:{
+    // The experimental WebGL2 renderer is chosen before the JVM starts; its natives are synchronous.
+    const gl3d=createGl3d();
+    await cheerpjInit({version:ogl?17:8,status:'none',javaProperties:['file.encoding=Shift_JIS',...(webgl?['p905i.gpu=webgl']:[])],
+      natives:{...gl3d.natives,
       async Java_p905i_web_BrowserAudio_loadNative(lib,id,events,duration){audio?.load(id,events,duration);},
       async Java_p905i_web_BrowserAudio_sampleNative(lib,id,index,bytes){audio?.sample(id,index,bytes);},
       async Java_p905i_web_BrowserAudio_controlNative(lib,id,command,position,rate,volume){audio?.control(id,command,position,rate,volume);},
@@ -238,7 +241,7 @@ async function start() {
     runtime=await lib.p905i.web.BrowserRuntime;
     $('log').textContent=application.warning;
     await javaCall(()=>runtime.start('/str/app.jar','/str/app.jam','/str/app.sp',`/files/iapp/${application.id}`,canvas.width,canvas.height,true));
-    window.iapp={get frames(){return frames;},id:application.id,renderer:ogl?'ogl':'2d',
+    window.iapp={get frames(){return frames;},id:application.id,renderer:webgl?'webgl':ogl?'ogl':'2d',
       audioStats:()=>audio?.stats(),
       getStatus:()=>javaCall(()=>runtime.getStatus()),
       exportScratchpad:()=>javaCall(()=>runtime.exportScratchpad())};

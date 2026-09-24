@@ -307,6 +307,35 @@ def build():
             ]:
                 assert text.count(old)==1,old
                 text=text.replace(old,new)
+            # Experimental WebGL2 renderer (src-ogl GpuBackend), only when the page chose it: projected triangles are
+            # recorded instead of rasterised, and the CPU picture is synchronised around each 3D section.
+            for old,new in [
+                ('        ogl.viewportHeight = host.surface().height();\n    }\n',
+                 '        ogl.viewportHeight = host.surface().height();\n        gpu = GpuBackend.create(this);\n    }\n\n'
+                 '    private final GpuBackend gpu;\n\n    boolean fogEnabled() {\n        return fog.enabled;\n    }\n'),
+                ('    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n',
+                 '    host.markOpenGlesActivity();\n    ogl.beginDrawing();\n    if (gpu != null) {\n        gpu.begin();\n    }\n'),
+                ('    ogl.endDrawing();\n    /* Native backend excluded; using software renderer. */\n',
+                 '    ogl.endDrawing();\n    if (gpu != null) {\n        gpu.end();\n    }\n'),
+                ('public final void glFlush() {\n    /* Native backend excluded; using software renderer. */\n',
+                 'public final void glFlush() {\n    if (gpu != null) {\n        gpu.submit();\n    }\n'),
+                ('public final void glClear(int mask) {\n    host.markOpenGlesActivity();\n',
+                 'public final void glClear(int mask) {\n    host.markOpenGlesActivity();\n    if (gpu != null) {\n        gpu.clear(mask);\n'
+                 '        if ((mask & GraphicsOGL.GL_COLOR_BUFFER_BIT) == 0) {\n            return;\n        }\n    }\n'),
+                ('    host.onSoftwareSurfaceMutation();\n    software.draw(mode, first, count, indexSource);\n',
+                 '    host.onSoftwareSurfaceMutation();\n    if (gpu != null) {\n        gpu.beginDraw(host.delegate().getClipBounds());\n'
+                 '        try {\n            software.draw(mode, first, count, indexSource);\n        } finally {\n            gpu.endDraw();\n        }\n'
+                 '        return;\n    }\n    software.draw(mode, first, count, indexSource);\n'),
+                ('    boolean useBackColor = ogl.lightModelTwoSide && !isFrontFacing(v0, v1, v2);\n',
+                 '    boolean useBackColor = ogl.lightModelTwoSide && !isFrontFacing(v0, v1, v2);\n    if (gpu != null) {\n'
+                 '        gpu.triangle(v0, v1, v2, useBackColor);\n        return;\n    }\n'),
+                ('    if (primitiveCount < 2) {\n        return;\n    }\n    if (!software.populateRasterVertex(firstVertex',
+                 '    if (primitiveCount < 2) {\n        return;\n    }\n    if (gpu != null) {\n'
+                 '        GpuBackend.notice("lines are drawn by the CPU between GPU batches");\n        gpu.cpuWrite();\n    }\n'
+                 '    if (!software.populateRasterVertex(firstVertex'),
+            ]:
+                assert text.count(old)==1,old
+                text=text.replace(old,new)
             renderer=text
         sources.append(write(rel,text))
     rel=Path('opendoja/host/DesktopSurface.java')

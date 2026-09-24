@@ -61,6 +61,9 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
   triangle pixel loop that reads its state once per triangle and writes out the
   common texture, depth and translucency paths with unchanged arithmetic;
   triangles inside every clip plane skip the clipping copies.
+  An experimental WebGL2 renderer (`GpuBackend`, chosen on the page) records the
+  projected triangles and their draw state instead of rasterising them, and keeps
+  the CPU picture in step around each 3D section.
 
 `UPSTREAM.json` lists every vendored input and its SHA-256, as well as original
 snapshot archive hashes. These archives themselves are not distributed here.

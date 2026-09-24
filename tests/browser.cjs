@@ -391,6 +391,35 @@ async function main() {
     assert.ok(await folded.locator('#full-screen').isVisible(),'the whole screen is offered where bars steal room');
     await wide.close();
     console.log('PASS a wide touch screen still gets the play layout');
+
+    console.log('Browser: experimental WebGL2 renderer against the software one');
+    // The same original 3D frame in both renderers. Interiors must match; only triangle edges may differ, because
+    // the GPU applies its own fill rule where the software rasteriser includes every pixel on an edge.
+    const pictures={};
+    for(const mode of ['ogl','webgl']) {
+      const tab=await browser.newPage({viewport:{width:1200,height:1000}});const failures=[];
+      tab.on('pageerror',error=>failures.push(String(error)));
+      await tab.goto(baseURL);await tab.locator('#renderer').selectOption(mode);
+      await tab.locator('#files').setInputFiles(['jar','jam'].map(ext=>path.join(root,'build/fixture/ogl.'+ext)));
+      await tab.locator('#start').click();
+      await tab.waitForFunction(()=>window.iapp?.frames>=5,null,{timeout:180000});
+      // The log panel refreshes once a second.
+      await tab.waitForFunction(line=>document.querySelector('#log').textContent.includes(line),
+        mode==='webgl'?'experimental WebGL2 renderer':'Loading I-Appli');
+      pictures[mode]=await tab.evaluate(()=>{const c=document.querySelector('#screen');return {width:c.width,
+        log:document.querySelector('#log').textContent,data:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)};});
+      assert.deepEqual(failures,[]);await tab.close();
+    }
+    assert.match(pictures.webgl.log,/experimental WebGL2 renderer/);
+    const soft=pictures.ogl,gpu=pictures.webgl,at=(p,x,y)=>p.data.slice((y*p.width+x)*4,(y*p.width+x)*4+3);
+    // 2D overlay, 2D background, smooth triangle, flat strip, small viewport, clipped triangle, 2D bar.
+    for(const [x,y] of [[10,8],[120,20],[60,76],[180,60],[180,170],[20,190],[120,230]])
+      assert.deepEqual(at(gpu,x,y),at(soft,x,y),`pixel ${x},${y}`);
+    let edges=0;
+    for(let i=0;i<soft.data.length;i+=4)
+      if(Math.max(...[0,1,2].map(k=>Math.abs(soft.data[i+k]-gpu.data[i+k])))>2)edges++;
+    assert.ok(edges<soft.data.length/4/200,`${edges} pixels differ, more than triangle edges explain`);
+    console.log(`PASS WebGL2 draws the 3D frame as software does, apart from ${edges} edge pixels`);
     console.log('ALL BROWSER CHECKS PASSED');
   } finally { await browser.close(); }
 }

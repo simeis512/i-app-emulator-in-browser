@@ -61,8 +61,8 @@ python dependencies.py && python notices.py --check && python check.py && python
 - `src/p905i/web/` は CheerpJ の Java 8 互換（`--release 8`）。Java 17 は `src-ogl/` のみ。
 - `web/` は ESM。外部ライブラリを追加しない。CommonJS はテストの `.cjs` だけ。
 - UI 文言・README・Issue は日本語。コード内コメントと commit message は英語。
-- 公開テストは自作データのみ。`tests/build_fixture.py` が生成する `TestIappli` の JAR / JAM / SP と、
-  数式で合成した波形を使う。実ゲームでの確認結果を書くときも、ゲーム名・素材・パスは公開しない。
+- 公開テストは自作データのみ。`tests/build_fixture.py` が生成する `TestIappli`（2D）と `TestOgl`（3D）の
+  JAR / JAM / SP と、数式で合成した波形を使う。実ゲームでの確認結果を書くときも、ゲーム名・素材・パスは公開しない。
 
 ## コミット
 

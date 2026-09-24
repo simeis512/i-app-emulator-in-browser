@@ -44,10 +44,13 @@ src/p905i/web/MldSharp.java
 src/p905i/web/MldNec.java
 src-ogl/p905i/web/FogState.java
 src-ogl/p905i/web/ExactMath.java
+src-ogl/p905i/web/WebGl.java
+src-ogl/opendoja/host/ogl/GpuBackend.java
 tests/RuntimeChecks.java
 tests/AudioChecks.java
 tests/OglChecks.java
 tests/TestIappli.java
+tests/TestOgl.java
 tests/build_fixture.py
 tests/browser.cjs
 tests/audio.cjs
@@ -64,6 +67,7 @@ web/loader.mjs
 web/audio.mjs
 web/instruments.mjs
 web/haptics.mjs
+web/gl3d.mjs
 web/style.css
 '''.split()
 

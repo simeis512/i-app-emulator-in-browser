@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from pathlib import Path
-import subprocess, zipfile, io, math, struct, wave
+import os, subprocess, zipfile, io, math, struct, wave
 root=Path(__file__).resolve().parents[1]
 output=root/'build/fixture';classes=output/'classes';classes.mkdir(parents=True,exist_ok=True)
 subprocess.run(['javac','-J-Duser.language=en','--release','8','-encoding','UTF-8','-cp',str(root/'web/p905i-runtime.jar'),'-d',str(classes),str(root/'tests/TestIappli.java')],check=True)
@@ -38,4 +38,11 @@ with zipfile.ZipFile(output/'fixture.jar','w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('nec.mld',nec_mld)
 (output/'fixture.jam').write_text('AppName=Original Test Fixture\nAppClass=TestIappli\nSPsize=16\n',encoding='ascii')
 (output/'fixture.sp').write_bytes((16).to_bytes(4,'big')+bytes(12))
+# The 3D fixture runs on the Java 17 OpenGL ES adapter, so it is compiled against that JAR.
+classes3d=output/'classes-ogl';classes3d.mkdir(parents=True,exist_ok=True)
+classpath=str(root/'web/p905i-ogl.jar')+os.pathsep+str(root/'web/p905i-runtime.jar')
+subprocess.run(['javac','-J-Duser.language=en','--release','17','-encoding','UTF-8','-cp',classpath,'-d',str(classes3d),str(root/'tests/TestOgl.java')],check=True)
+with zipfile.ZipFile(output/'ogl.jar','w',zipfile.ZIP_DEFLATED) as z:
+    for p in sorted(classes3d.rglob('*.class')):z.write(p,p.relative_to(classes3d).as_posix())
+(output/'ogl.jam').write_text('AppName=Original 3D Test Fixture\nAppClass=TestOgl\n',encoding='ascii')
 print('Built original fixture in',output)
