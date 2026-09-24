@@ -63,7 +63,8 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
   triangles inside every clip plane skip the clipping copies.
   An experimental WebGL2 renderer (`GpuBackend`, chosen on the page) records the
   projected triangles and their draw state instead of rasterising them, and keeps
-  the CPU picture in step around each 3D section.
+  the CPU picture in step around each 3D section and wherever 2D drawing, pixel
+  reads or image copies use a picture that GPU drawing has not reached yet.
 
 `UPSTREAM.json` lists every vendored input and its SHA-256, as well as original
 snapshot archive hashes. These archives themselves are not distributed here.

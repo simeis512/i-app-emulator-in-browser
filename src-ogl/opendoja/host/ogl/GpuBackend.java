@@ -19,7 +19,13 @@ final class GpuBackend {
     static final int COMMAND = 37, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 10;
     private static final int MAX_VERTICES = 3 * 21000;
     private static int enabled = -1;
-    private static final Map<BufferedImage, Integer> targets = new IdentityHashMap<>();
+    /** Per picture: its GPU colour texture, a version bumped whenever the CPU copy changes, and the renderer whose
+     * GPU drawing on it has not come back to the CPU yet. */
+    private static final class Picture {
+        int target, version;
+        GpuBackend pending;
+    }
+    private static final Map<BufferedImage, Picture> pictures = new IdentityHashMap<>();
     private static final Set<String> noticed = new HashSet<>();
     /** GPU texture key and the upload revision it holds, per texture object; textures are shared by all renderers. */
     private static final Map<OglRenderer.OglTexture, int[]> textures = new IdentityHashMap<>();
@@ -44,7 +50,8 @@ final class GpuBackend {
     private final OglRenderer renderer;
     private BufferedImage image;
     private int[] pixels;
-    private int width, height, target = -1, surface = -1;
+    private int width, height, surface = -1, uploadedVersion = -1;
+    private Picture picture;
     private float[] vertices = new float[6 * 3 * 256];
     private int[] colors = new int[3 * 256];
     private int vertexCount;
@@ -53,7 +60,7 @@ final class GpuBackend {
     private int commandCount;
     private final int[] state = new int[COMMAND];
     private final float[] stateFloats = new float[FLOATS];
-    private boolean section, implicit, uploaded, drawn;
+    private boolean section, implicit, drawn;
     private int colorMask = 15;
     private int drawFirst;
 
@@ -64,23 +71,47 @@ final class GpuBackend {
     private void bind() {
         BufferedImage current = renderer.host().surface().image();
         if (current == image) return;
+        Picture shared;
+        synchronized (pictures) {
+            shared = pictures.get(current);
+            if (shared == null) {
+                pictures.put(current, shared = new Picture());
+                shared.target = WebGl.target(current.getWidth(), current.getHeight());
+            }
+        }
+        // The picture is complete before the image is: a thread that sees this image also sees its picture.
+        width = current.getWidth();
+        height = current.getHeight();
+        pixels = ((DataBufferInt) current.getRaster().getDataBuffer()).getData();
+        picture = shared;
+        surface = WebGl.surface(shared.target);
+        uploadedVersion = -1;
         image = current;
-        width = image.getWidth();
-        height = image.getHeight();
-        pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-        Integer shared = targets.get(image);
-        if (shared == null) targets.put(image, shared = WebGl.target(width, height));
-        target = shared;
-        surface = WebGl.surface(target);
-        uploaded = false;
     }
 
-    /** The GPU copy of the picture starts from the CPU picture before anything is drawn over it. */
+    /** The CPU is about to use a picture: GPU drawing still pending on it comes back first, and a write makes every
+     * renderer upload the picture again before it draws on the GPU. */
+    static void cpuAccess(BufferedImage image, boolean write) {
+        if (pictures.isEmpty()) return;
+        Picture picture;
+        synchronized (pictures) {
+            picture = pictures.get(image);
+        }
+        if (picture == null) return;
+        GpuBackend pending = picture.pending;
+        if (pending != null) pending.flush();
+        if (write) picture.version++;
+    }
+
+    /** The GPU copy of the picture starts from the CPU picture before anything is drawn over it, once per section and
+     * again after the CPU or another renderer changed it. */
     private void prepare() {
         bind();
-        if (!uploaded) {
-            WebGl.upload(target, pixels, width, height);
-            uploaded = true;
+        GpuBackend other = picture.pending;
+        if (other != null && other != this) other.flush();
+        if (uploadedVersion != picture.version) {
+            WebGl.upload(picture.target, pixels, width, height);
+            uploadedVersion = picture.version;
         }
     }
 
@@ -91,6 +122,7 @@ final class GpuBackend {
     void end() {
         flush();
         section = false;
+        uploadedVersion = -1;
     }
 
     /** Sends what is recorded. Readback happens only when the section ends or the CPU is about to use the picture. */
@@ -104,13 +136,19 @@ final class GpuBackend {
     /** Brings the CPU picture up to date; the next GPU drawing starts again from it. */
     void flush() {
         submit();
-        if (drawn) WebGl.readback(surface, pixels, width, height);
+        if (drawn) {
+            WebGl.readback(surface, pixels, width, height);
+            // The CPU copy now matches this renderer's GPU copy; other renderers must upload it again.
+            uploadedVersion = ++picture.version;
+        }
         drawn = false;
-        uploaded = false;
+        if (picture != null && picture.pending == this) picture.pending = null;
     }
 
     /** The CPU is about to write the picture itself (a colour clear or a line), so both copies must agree first. */
     void cpuWrite() {
+        bind();
+        cpuAccess(image, true);
         flush();
     }
 
@@ -145,6 +183,7 @@ final class GpuBackend {
         if (vertexCount > drawFirst) {
             command(DRAW, drawFirst, vertexCount - drawFirst);
             drawn = true;
+            picture.pending = this;
         }
         if (implicit) {
             implicit = false;
@@ -178,6 +217,7 @@ final class GpuBackend {
             if (vertexCount > drawFirst) {
                 command(DRAW, drawFirst, vertexCount - drawFirst);
                 drawn = true;
+                picture.pending = this;
             }
             submit();
             return;

@@ -2,7 +2,7 @@
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
 // Keys 1 to 5 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
-// 5 fog and colour masks.
+// 5 fog and colour masks; 6 2D, pixel reads, a second Graphics and an image copy inside 3D sections.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
 
@@ -13,7 +13,7 @@ public class TestOgl extends IApplication {
         volatile int scene=1;
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
-            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_5)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_6)scene=key-Display.KEY_0;
         }
         FloatBuffer floats(float... values) { return buffers.allocateFloatBuffer(values); }
         void shape(GraphicsOGL gl,int mode,int shade,float[] vertices,float[] colors) {
@@ -34,17 +34,43 @@ public class TestOgl extends IApplication {
             g.setColor(Graphics.getColorOfRGB(20,40,90));g.fillRect(0,0,w,h);
             g.setColor(Graphics.getColorOfRGB(200,200,200));g.fillRect(0,h-40,w,40);
             gl.beginDrawing();
+            setup(gl,w,h);
+            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else if(scene==6)sync(g,gl,w,h);else colours(gl,w,h);
+            gl.glViewport(0,0,w,h);
+            gl.endDrawing();
+            // 2D over the 3D.
+            g.setColor(Graphics.getColorOfRGB(255,220,0));g.fillRect(4,4,30,14);
+            if(scene==6){g.setColor(read);g.fillRect(200,8,16,16);}
+            g.unlock(true);
+        }
+        void setup(GraphicsOGL gl,int w,int h) {
             gl.glViewport(0,0,w,h);
             gl.glMatrixMode(GraphicsOGL.GL_PROJECTION);gl.glLoadIdentity();gl.glOrthof(-1,1,-1,1,-1,1);
             gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
             gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisable(GraphicsOGL.GL_DEPTH_TEST);gl.glDisable(GraphicsOGL.GL_CULL_FACE);
             gl.glEnableClientState(GraphicsOGL.GL_VERTEX_ARRAY);gl.glEnableClientState(GraphicsOGL.GL_COLOR_ARRAY);
-            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else colours(gl,w,h);
-            gl.glViewport(0,0,w,h);
-            gl.endDrawing();
-            // 2D over the 3D.
-            g.setColor(Graphics.getColorOfRGB(255,220,0));g.fillRect(4,4,30,14);
-            g.unlock(true);
+        }
+        Graphics second, offscreenGraphics;Image offscreen;int read;
+        void sync(Graphics g,GraphicsOGL gl,int w,int h) {
+            if(second==null){second=getGraphics();offscreen=Image.createImage(64,48);offscreenGraphics=offscreen.getGraphics();}
+            // 2D drawn inside a 3D section lands between the quads drawn before and after it.
+            tinted(gl,-.9f,.2f,-.3f,.8f, 0,.6f,1,1);
+            g.setColor(Graphics.getColorOfRGB(230,40,40));g.fillRect(40,40,40,40);
+            tinted(gl,-.55f,.05f,-.15f,.45f, 1,1,0,1);
+            // A pixel read inside the section sees the first quad; it is shown as a square after the section.
+            read=g.getPixel(20,40);
+            // A second Graphics on the same picture draws its own section, then the first draws over it.
+            GraphicsOGL other=(GraphicsOGL)second;
+            other.beginDrawing();setup(other,w,h);tinted(other,.1f,.2f,.7f,.8f, 0,1,.5f,1);other.endDrawing();
+            tinted(gl,.4f,.1f,.9f,.5f, 1,.3f,.8f,1);
+            // An image whose own 3D section is still open is copied onto the screen.
+            GraphicsOGL image=(GraphicsOGL)offscreenGraphics;
+            offscreenGraphics.setColor(Graphics.getColorOfRGB(250,250,250));offscreenGraphics.fillRect(0,0,64,48);
+            image.beginDrawing();setup(image,64,48);
+            shape(image,GraphicsOGL.GL_TRIANGLES,GraphicsOGL.GL_SMOOTH,new float[]{-1,-1,0, 1,-1,0, 0,1,0},
+                new float[]{.9f,.4f,0,1, .9f,.4f,0,1, .9f,.4f,0,1});
+            g.drawImage(offscreen,150,160);
+            image.endDrawing();
         }
         void colours(GraphicsOGL gl,int w,int h) {
             // Top left: colours blend across a smooth triangle.

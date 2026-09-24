@@ -408,6 +408,8 @@ async function main() {
       // The GPU's exp() may differ from Math.exp in the last bits, moving a fogged level by one.
       {key:'5',name:'fog and colour masks',tolerance:1,
         points:[[10,8],[120,20],[48,48],[48,108],[48,168],[120,48],[120,108],[120,168],[192,48],[192,108],[192,168],[210,219]]},
+      {key:'6',name:'2D, pixel reads, a second Graphics and an image copy inside 3D sections',
+        points:[[24,36],[45,45],[70,75],[78,30],[205,15],[144,36],[186,84],[216,96],[182,190],[152,162]]},
     ];
     const pictures={ogl:[],webgl:[]},logs={};
     for(const mode of ['ogl','webgl']) {
@@ -425,21 +427,26 @@ async function main() {
         await tab.waitForFunction(count=>iapp.frames>=count+3,before);
         pictures[mode].push(await tab.evaluate(()=>{const c=document.querySelector('#screen');
           return {width:c.width,data:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)};}));
+        if(mode==='webgl'&&(scene.key==='1'||scene.key==='6')) {
+          // A plain frame is one 3D section: one upload, one batch and one readback. Scene 6 must read back more
+          // often, at each point where the CPU uses the picture inside a section.
+          const [before,frames0]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
+          await tab.waitForFunction(count=>iapp.frames>=count+6,frames0);
+          const [after,frames1]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
+          const frames=frames1-frames0,readbacks=after.readbacks-before.readbacks;
+          if(scene.key==='1') {
+            assert.ok(Math.abs(readbacks-frames)<=1,`${readbacks} readbacks for ${frames} frames`);
+            assert.equal(after.uploads-before.uploads,readbacks);assert.equal(after.batches-before.batches,readbacks);
+          } else assert.ok(readbacks>=frames*3,`only ${readbacks} readbacks for ${frames} frames with CPU use inside sections`);
+        }
       }
-      if(mode==='webgl') {
-        // In steady state each frame is one 3D section: one upload, one batch and one readback.
-        const [before,frames0]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
-        await tab.waitForFunction(count=>iapp.frames>=count+6,frames0);
-        const [after,frames1]=await tab.evaluate(()=>[iapp.gl3dStats(),iapp.frames]);
-        const sections=after.readbacks-before.readbacks;
-        assert.ok(Math.abs(sections-(frames1-frames0))<=1,`${sections} readbacks for ${frames1-frames0} frames`);
-        assert.equal(after.uploads-before.uploads,sections);assert.equal(after.batches-before.batches,sections);
-        assert.ok(after.textures>=5&&after.draws>0,'textures reached the GPU');
-      }
+      const totals=mode==='webgl'?await tab.evaluate(()=>iapp.gl3dStats()):null;
+      if(totals)assert.ok(totals.textures>=5&&totals.draws>0,'textures reached the GPU');
       // The log panel refreshes once a second.
       await tab.waitForFunction(line=>document.querySelector('#log').textContent.includes(line),
         mode==='webgl'?'experimental WebGL2 renderer':'Loading I-Appli');
       logs[mode]=await tab.locator('#log').textContent();
+      assert.doesNotMatch(logs[mode],/Exception/,`${mode} log reports an exception`);
       assert.deepEqual(failures,[]);await tab.close();
     }
     assert.match(logs.webgl,/experimental WebGL2 renderer/);
