@@ -57,7 +57,9 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
   shared framebuffer bridge, explicit unsupported API errors, color masks,
   secondary-texture limitation notices, perspective-triangle fog, and per-pixel
   rounding and texture wrapping through `ExactMath`, which returns the same values
-  as `Math.round` / `Math.floor` without their slow path under CheerpJ.
+  as `Math.round` / `Math.floor` without their slow path under CheerpJ, and a
+  triangle pixel loop that reads its state once per triangle and writes out the
+  common texture, depth and translucency paths with unchanged arithmetic.
 
 `UPSTREAM.json` lists every vendored input and its SHA-256, as well as original
 snapshot archive hashes. These archives themselves are not distributed here.
