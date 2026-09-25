@@ -83,6 +83,14 @@ def patched_sources():
              'syncMode = value == 1;'),
             ('Mobile.log(Mobile.LOG_WARNING, AudioPresenter.class.getPackage().getName() + "." + AudioPresenter.class.getSimpleName() + ": " + "setSyncEvent not implemented. channel: " + channel + " key:" + key);',
              'syncChannel = channel; syncKey = key;'),
+            # Applications set tempo and volume on presenters whose sound they have already disposed, before giving
+            # them a new one. The value is kept for the next play; only a live player takes it at once.
+            ('if(mediaSound != null) { ((PlatformPlayer.tempoControl)mediaSound.getPlayer()',
+             'if(livePlayer()) { ((PlatformPlayer.tempoControl)mediaSound.getPlayer()'),
+            ('if(mediaSound != null) { ((PlatformPlayer.volumeControl)mediaSound.getPlayer()',
+             'if(livePlayer()) { ((PlatformPlayer.volumeControl)mediaSound.getPlayer()'),
+            ('public void setMediaListener(MediaListener listener)',
+             'private boolean livePlayer() { return mediaSound != null && mediaSound.getPlayer() != null && mediaSound.getPlayer().getState() != Player.CLOSED; }\n\n\tpublic void setMediaListener(MediaListener listener)'),
         ],
         'org/recompile/mobile/MIDletEnhancements.java': [
             # Thread.yield only hands the CPU over. DoJa frames are already limited after each flush, so limiting

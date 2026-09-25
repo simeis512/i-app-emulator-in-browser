@@ -18,8 +18,10 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
   resampled WAVE payload sizes rounded to complete PCM frames, soft key
   labels reported to the browser frontend rather than drawn over the canvas,
   DoJa clip rectangles measured from the current origin, requested DoJa font
-  sizes honoured, DoJa text drawn without antialiasing, and `Thread.yield` in
-  DoJa applications handing over the CPU without an extra frame-limit wait.
+  sizes honoured, DoJa text drawn without antialiasing, `Thread.yield` in
+  DoJa applications handing over the CPU without an extra frame-limit wait, and
+  AudioPresenter tempo and volume kept for the next play when the presenter's
+  sound has been disposed.
 
 Separately licensed components retained from that snapshot:
 

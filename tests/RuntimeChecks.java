@@ -105,6 +105,14 @@ public final class RuntimeChecks {
             require(complete.await(3,TimeUnit.SECONDS),"muted sequence emits completion at its actual duration");
             require(player.getState()==Player.PREFETCHED,"completed sequence returns to prefetched state");
             player.close();
+            // An application may set attributes on a presenter whose sound it has already disposed, then give it a new
+            // sound; the values carry over instead of failing on the missing player.
+            AudioPresenter presenter=AudioPresenter.getAudioPresenter();
+            MediaSound disposed=MediaManager.getSound(midi.toByteArray());disposed.use();presenter.setSound(disposed);disposed.dispose();
+            boolean kept=true;
+            try{presenter.setAttribute(AudioPresenter.SET_VOLUME,40);presenter.setAttribute(AudioPresenter.CHANGE_TEMPO,120);}
+            catch(RuntimeException e){kept=false;}
+            require(kept,"attributes on a presenter whose sound was disposed are kept without an exception");
             System.out.println("ALL RUNTIME CHECKS PASSED");System.exit(0);
         } catch(Throwable e){e.printStackTrace();System.exit(1);}
     }
