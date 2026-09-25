@@ -386,10 +386,43 @@ def build():
                  '    if (primitiveCount < 2) {\n        return;\n    }\n    if (gpu != null) {\n'
                  '        GpuBackend.notice("lines are drawn by the CPU between GPU batches");\n        gpu.cpuWrite();\n    }\n'
                  '    if (!software.populateRasterVertex(firstVertex'),
+                # Texture unit 1 (a cube map reflection) is drawn by the GPU only. Its coordinates are generated per
+                # vertex after lighting and travel through the vertex cache, clipping and projection with the vertex.
+                ('    int color;\n    int backColor;\n\n    void set(float clipX,',
+                 '    int color;\n    int backColor;\n    float reflectX;\n    float reflectY;\n    float reflectZ;\n\n    void set(float clipX,'),
+                ('other.x, other.y, other.depth, other.reciprocalW, other.u, other.v, other.color, other.backColor);\n    }\n',
+                 'other.x, other.y, other.depth, other.reciprocalW, other.u, other.v, other.color, other.backColor);\n'
+                 '        reflectX = other.reflectX;\n        reflectY = other.reflectY;\n        reflectZ = other.reflectZ;\n    }\n'),
+                ('lerpColor(from.backColor, to.backColor, t)\n        );\n    }\n',
+                 'lerpColor(from.backColor, to.backColor, t)\n        );\n        reflectX = lerp(from.reflectX, to.reflectX, t);\n'
+                 '        reflectY = lerp(from.reflectY, to.reflectY, t);\n        reflectZ = lerp(from.reflectZ, to.reflectZ, t);\n    }\n'),
+                ('            clipVertex.backColor\n    );\n    return projected;\n',
+                 '            clipVertex.backColor\n    );\n    projected.reflectX = clipVertex.reflectX;\n'
+                 '    projected.reflectY = clipVertex.reflectY;\n    projected.reflectZ = clipVertex.reflectZ;\n    return projected;\n'),
+                ('static RasterVertex[] createRasterVertexArray(int length) {',
+                 '/** Unit 1 coordinates for the GPU: the eye direction reflected about the eye-space normal, or the normal itself.\n'
+                 ' * The normal is normalised, as lighting uses it. */\n'
+                 'void gpuTexGen(RasterVertex target, int vertexIndex) {\n'
+                 '    if (gpu == null || !gpu.generating()) {\n        return;\n    }\n'
+                 '    ClipVector normal = normalVectorTemp();\n    resolveEyeNormal(normal, vertexIndex, false);\n'
+                 '    if (gpu.normalMap()) {\n        target.reflectX = normal.x;\n        target.reflectY = normal.y;\n'
+                 '        target.reflectZ = normal.z;\n        return;\n    }\n'
+                 '    ClipVector eye = eyeVectorTemp();\n    float length = vectorLength(eye.x, eye.y, eye.z);\n'
+                 '    float scale = length > 0.000001f ? 1f / length : 0f;\n'
+                 '    float ux = eye.x * scale;\n    float uy = eye.y * scale;\n    float uz = eye.z * scale;\n'
+                 '    float twice = 2f * ((normal.x * ux) + (normal.y * uy) + (normal.z * uz));\n'
+                 '    target.reflectX = ux - (normal.x * twice);\n    target.reflectY = uy - (normal.y * twice);\n'
+                 '    target.reflectZ = uz - (normal.z * twice);\n}\n\n'
+                 'public ReflectionUnit gpuReflectionUnit() {\n    return gpu == null ? null : gpu.reflection();\n}\n\n'
+                 'static RasterVertex[] createRasterVertexArray(int length) {'),
             ]:
                 assert text.count(old)==1,old
                 text=text.replace(old,new)
             renderer=text
+        if name=='OglSoftwareRenderer':
+            old='        drawScratch.cacheVertex(vertexIndex, targetVertex);\n        return true;\n'
+            assert text.count(old)==1,old
+            text=text.replace(old,'        owner.gpuTexGen(targetVertex, vertexIndex);\n'+old)
         sources.append(write(rel,text))
     rel=Path('opendoja/host/DesktopSurface.java')
     text=(UP/rel).read_text(encoding='utf-8')
@@ -410,6 +443,7 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
     private boolean warnedReflection;
     private int writeMask = -1;
     private final java.awt.image.BufferedImage picture;
+    private final opendoja.host.ogl.ReflectionUnit unit1;
     public void glColorMask(boolean red, boolean green, boolean blue, boolean alpha) {
         writeMask=(red?0x00ff0000:0)|(green?0x0000ff00:0)|(blue?0x000000ff:0)|(alpha?0xff000000:0);
         ogl.gpuColorMask(red,green,blue,alpha);
@@ -431,7 +465,7 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
         activeTexture=texture;
     }
     public void glTexEnvf(int target, int pname, float param) {
-        if(activeTexture!=GL_TEXTURE0) { reflectionNotice(); return; }
+        if(activeTexture!=GL_TEXTURE0) { if(unit1!=null) unit1.glTexEnvf(target,pname,param); else reflectionNotice(); return; }
         ogl.glTexEnvi(target,pname,Math.round(param));
     }
     public Graphics(final PlatformImage image) {
@@ -447,6 +481,7 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
             public void flushSurfacePresentation() { }
             public void onSoftwareSurfaceMutation() { }
         });
+        unit1 = ogl.gpuReflectionUnit();
     }
 '''
     adapter=adapter.replace('    private void reflectionNotice() {',CPU_SYNC+'    private void reflectionNotice() {')
@@ -454,18 +489,21 @@ public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
         args=', '.join(p.strip().split()[-1] for p in params.split(',') if p.strip())
         guard=''
         if name=='glClientActiveTexture': guard='clientTexture=texture; '
-        if name in ['glEnable','glDisable']: guard='if(activeTexture!=GL_TEXTURE0 && (cap==GL_TEXTURE_2D || cap==GL_TEXTURE_CUBE_MAP || cap==GL_TEXTURE_GEN_STR)) { reflectionNotice(); return; } '
+        if name in ['glEnable','glDisable']: guard=f'if(activeTexture!=GL_TEXTURE0 && (cap==GL_TEXTURE_2D || cap==GL_TEXTURE_CUBE_MAP || cap==GL_TEXTURE_GEN_STR)) {{ if(unit1!=null) unit1.{name}(cap); else reflectionNotice(); return; }} '
         if name in ['glEnableClientState','glDisableClientState']:guard='if(clientTexture!=GL_TEXTURE0 && array==GL_TEXTURE_COORD_ARRAY) return; '
         if name=='glTexCoordPointer':guard='if(clientTexture!=GL_TEXTURE0) return; '
         if name in ['glBindTexture','glCompressedTexImage2D','glTexImage2D','glTexParameterf','glTexParameteri','glTexEnvf','glTexEnvi','glTexEnvfv']:
-            guard='if(activeTexture!=GL_TEXTURE0) { reflectionNotice(); return; } '
+            guard=f'if(activeTexture!=GL_TEXTURE0) {{ if(unit1!=null) unit1.{name}({args}); else reflectionNotice(); return; }} '
         call=('return ' if result!='void' else '')+f'ogl.{name}({args});'
+        if name=='glDeleteTextures': call+=' if(unit1!=null) unit1.deleteTextures('+('n' if 'int n' in params else 'textures.length')+', textures);'
         if name in ['glClear','glDrawArrays','glDrawElements']:
             call=f'int[] before=beforeMaskedDraw({str(name=="glClear").lower()}); try {{ '+call+' } finally { afterMaskedDraw(before); }'
         adapter+=f'    public {result} {name}({params}) {{ '+guard+call+' }\n'
     interface2=(UP/'com/nttdocomo/opt/ui/ogl/GraphicsOGL2.java').read_text(encoding='utf-8')
     for result,name,params in re.findall(r'\b(void) (gl\w+)\(([^)]*)\);',interface2):
-        adapter+=f'    public {result} {name}({params}) {{ if(activeTexture!=GL_TEXTURE0) {{ reflectionNotice(); return; }} throw new UnsupportedOperationException("OpenGL ES extension: {name}"); }}\n'
+        args=', '.join(p.strip().split()[-1] for p in params.split(',') if p.strip())
+        adapter+=(f'    public {result} {name}({params}) {{ if(activeTexture!=GL_TEXTURE0) {{ if(unit1!=null) {{ unit1.{name}({args}); return; }} '
+                  f'reflectionNotice(); return; }} throw new UnsupportedOperationException("OpenGL ES extension: {name}"); }}\n')
     adapter+='}\n'
     sources.append(write('com/nttdocomo/ui/Graphics.java',adapter))
     sources+=list((ROOT/'src-ogl').rglob('*.java'))

@@ -14,9 +14,10 @@ import p905i.web.WebGl;
 /** Experimental WebGL2 renderer for the browser (i-app-emulator-in-browser, GPL-3.0-or-later). The software pipeline
  * still fetches, transforms, lights and clips; each projected triangle is recorded here instead of being rasterised,
  * with the state of its draw call, and a 3D section goes to the browser in one batch. Colour is one GPU texture per
- * image, shared by the renderers drawing on it; depth belongs to each renderer, as in the software path. */
+ * image, shared by the renderers drawing on it; depth belongs to each renderer, as in the software path. Texture unit 1
+ * (a cube map reflection, which the software path does not draw) is drawn here only. */
 final class GpuBackend {
-    static final int COMMAND = 37, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 10;
+    static final int COMMAND = 43, DRAW = 1, CLEAR_DEPTH = 2, FLOATS = 10;
     private static final int MAX_VERTICES = 3 * 21000;
     private static int enabled = -1;
     /** Per picture: its GPU colour texture, a version bumped whenever the CPU copy changes, and the renderer whose
@@ -29,6 +30,7 @@ final class GpuBackend {
     private static final Set<String> noticed = new HashSet<>();
     /** GPU texture key and the upload revision it holds, per texture object; textures are shared by all renderers. */
     private static final Map<OglRenderer.OglTexture, int[]> textures = new IdentityHashMap<>();
+    private static final Map<ReflectionUnit.Cube, int[]> cubes = new IdentityHashMap<>();
     private static int nextTexture;
     /** GPU textures of deleted texture objects, freed once no recorded draw can still use them. */
     private static final java.util.List<Integer> retired = new java.util.ArrayList<>();
@@ -55,6 +57,8 @@ final class GpuBackend {
     private int width, height, surface = -1, uploadedVersion = -1;
     private Picture picture;
     private float[] vertices = new float[6 * 3 * 256];
+    /** Unit 1 coordinates, three per vertex; sent only with a batch that draws a reflection. */
+    private float[] reflections = new float[3 * 3 * 256];
     private int[] colors = new int[3 * 256];
     private int vertexCount;
     private int[] commands = new int[COMMAND * 32];
@@ -62,12 +66,26 @@ final class GpuBackend {
     private int commandCount;
     private final int[] state = new int[COMMAND];
     private final float[] stateFloats = new float[FLOATS];
-    private boolean section, implicit, drawn;
+    private boolean section, implicit, drawn, reflecting, batchReflects;
+    private final ReflectionUnit reflection = new ReflectionUnit();
     private int colorMask = 15;
     private int drawFirst;
 
     private GpuBackend(OglRenderer renderer) {
         this.renderer = renderer;
+    }
+
+    ReflectionUnit reflection() {
+        return reflection;
+    }
+
+    /** Whether the draw being recorded needs unit 1 coordinates from each vertex. */
+    boolean generating() {
+        return reflecting;
+    }
+
+    boolean normalMap() {
+        return reflection.normalMap();
     }
 
     private void bind() {
@@ -134,6 +152,11 @@ final class GpuBackend {
         if (known != null) retired.add(known[0]);
     }
 
+    static void forget(ReflectionUnit.Cube cube) {
+        int[] known = cubes.remove(cube);
+        if (known != null) retired.add(known[0]);
+    }
+
     private static void freeRetired() {
         if (retired.isEmpty()) return;
         synchronized (pictures) {
@@ -145,10 +168,12 @@ final class GpuBackend {
 
     /** Sends what is recorded. Readback happens only when the section ends or the CPU is about to use the picture. */
     void submit() {
-        if (commandCount > 0) WebGl.draw(surface, vertices, colors, vertexCount, commands, commandCount, floats);
+        if (commandCount > 0) WebGl.draw(surface, vertices, colors, vertexCount, commands, commandCount, floats,
+                batchReflects ? reflections : null);
         vertexCount = 0;
         commandCount = 0;
         drawFirst = 0;
+        batchReflects = false;
     }
 
     /** Brings the CPU picture up to date; the next GPU drawing starts again from it. */
@@ -192,6 +217,7 @@ final class GpuBackend {
         }
         prepare();
         capture(clip);
+        captureReflection();
         OglRenderer.OglState ogl = renderer.oglState();
         if (ogl.textureEnabled() && ogl.textureEnvMode == GraphicsOGL.GL_COMBINE) notice("GL_COMBINE is drawn as GL_MODULATE");
         drawFirst = vertexCount;
@@ -203,6 +229,7 @@ final class GpuBackend {
             drawn = true;
             picture.pending = this;
         }
+        reflecting = false;
         if (implicit) {
             implicit = false;
             end();
@@ -226,6 +253,10 @@ final class GpuBackend {
         vertices[i + 3] = v.clipW;
         vertices[i + 4] = v.u;
         vertices[i + 5] = v.v;
+        int r = vertexCount * 3;
+        reflections[r] = v.reflectX;
+        reflections[r + 1] = v.reflectY;
+        reflections[r + 2] = v.reflectZ;
         colors[vertexCount++] = color;
     }
 
@@ -241,6 +272,7 @@ final class GpuBackend {
             return;
         }
         vertices = java.util.Arrays.copyOf(vertices, vertices.length * 2);
+        reflections = java.util.Arrays.copyOf(reflections, reflections.length * 2);
         colors = java.util.Arrays.copyOf(colors, colors.length * 2);
     }
 
@@ -293,6 +325,33 @@ final class GpuBackend {
         }
     }
 
+    /** Unit 1 for a draw: the cube, its filter, texture function, base format and colour. Coordinates come with each
+     * vertex. */
+    private void captureReflection() {
+        ReflectionUnit.Cube cube = reflection.active();
+        reflecting = cube != null;
+        if (reflecting) {
+            state[37] = 1;
+            state[38] = cubeKey(cube);
+            state[39] = cube.linear() ? 1 : 0;
+            state[40] = reflection.envMode;
+            state[41] = cube.faces[0].baseFormat;
+            state[42] = reflection.envColor;
+        }
+    }
+
+    /** Uploads a cube's six faces when they changed, after the draws recorded with the old ones. */
+    private int cubeKey(ReflectionUnit.Cube cube) {
+        int[] known = cubes.get(cube);
+        if (known == null) cubes.put(cube, known = new int[]{nextTexture++, -1});
+        if (known[1] != cube.revision) {
+            if (commandCount > 0) submit();
+            for (int face = 0; face < 6; face++) WebGl.cube(known[0], face, cube.faces[face].pixels, cube.faces[face].width);
+            known[1] = cube.revision;
+        }
+        return known[0];
+    }
+
     /** Uploads a texture when its contents changed; draws already recorded used the old contents, so they go first. */
     private int textureKey(OglRenderer.OglTexture texture) {
         int[] known = textures.get(texture);
@@ -312,6 +371,7 @@ final class GpuBackend {
         }
         int o = commandCount * COMMAND;
         System.arraycopy(state, 0, commands, o, COMMAND);
+        if (type == DRAW && state[37] != 0) batchReflects = true;
         commands[o] = type;
         commands[o + 1] = first;
         commands[o + 2] = count;

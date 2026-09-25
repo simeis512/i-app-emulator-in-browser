@@ -2,22 +2,28 @@
 // Experimental WebGL2 renderer for the OpenGL ES bridge. Java still fetches, transforms, lights and clips; it hands
 // over clip-space triangles with one state record per draw call, a 3D section at a time. Colour is one texture per
 // image, shared by the Graphics drawing on it; each Graphics draws through its own framebuffer and depth buffer.
-const COMMAND=37, DRAW=1, CLEAR_DEPTH=2, FLOATS=10;
+// Texture unit 1 is a cube map addressed by coordinates Java generates per vertex (reflection or normal).
+const COMMAND=43, DRAW=1, CLEAR_DEPTH=2, FLOATS=10;
 const VERTEX=`#version 300 es
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
 layout(location=2) in vec4 color;
+layout(location=3) in vec3 reflection;
 out vec4 vColor;
 out vec2 vUv;
-void main(){gl_Position=position;vColor=color.zyxw*255.0;vUv=uv;}`;
+out vec3 vReflection;
+void main(){gl_Position=position;vColor=color.zyxw*255.0;vUv=uv;vReflection=reflection;}`;
 // Colours are interpolated on the 0..255 scale and rounded as the software rasteriser does. Textures are read with
 // texelFetch to reproduce its sampler: wrap, then scale by size - 1, round to the nearest texel or weigh four texels in
-// 256ths. MODULATE is integer arithmetic as in software; the other functions follow its float formulas.
+// 256ths. MODULATE is integer arithmetic as in software; the other functions follow its float formulas. Unit 1 has no
+// software counterpart, so its cube map is filtered by the GPU and then combined by the same texture functions.
 const FRAGMENT=`#version 300 es
 precision highp float;
 precision highp int;
 uniform sampler2D tex;
+uniform samplerCube cube;
 uniform int textured, texKey, texFlags, envMode, baseFormat, envColor, alphaTest;
+uniform int reflecting, cubeEnvMode, cubeFormat, cubeEnvColor;
 // The software alpha test as 256 pass bits, one per alpha byte, so no GPU division decides a boundary.
 uniform int alphaBits[8];
 // Fog after the texture function and before the alpha test, at the eye distance 1/w, as FogState applies it.
@@ -26,6 +32,7 @@ uniform vec3 fogParams, fogColor;
 uniform ivec2 texSize;
 in vec4 vColor;
 in vec2 vUv;
+in vec3 vReflection;
 out vec4 fragment;
 const int ALPHA=6406,RGB=6407,LUMINANCE=6409,MODULATE=8448,REPLACE=7681,DECAL=8449,BLEND=3042,ADD=260;
 float wrap(float v,bool edge){if(edge)return clamp(v,0.0,1.0);float f=v-floor(v);return f<0.0?f+1.0:f;}
@@ -42,29 +49,31 @@ ivec4 sampleTexture(vec2 uv){
   return ((texel(x0,y0)*((256-tx)*(256-ty))+texel(x1,y0)*(tx*(256-ty))+texel(x0,y1)*((256-tx)*ty)+texel(x1,y1)*(tx*ty))+32768)>>16;
 }
 ivec4 pack(vec4 c){return ivec4(floor(clamp(c,0.0,1.0)*255.0+0.5));}
+// One texture function: the incoming colour p, the texel s, the function, the texture's base format and GL's colour.
+ivec4 environment(ivec4 p,ivec4 s,int mode,int format,int color){
+  if(mode==MODULATE){
+    if(format!=LUMINANCE&&format!=RGB)p.a=(p.a*s.a+127)/255;
+    if(format!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;
+    return p;
+  }
+  vec4 pf=vec4(p)/255.0,sf=vec4(s)/255.0,t=sf;
+  if(format==ALPHA)t.rgb=vec3(0.0);
+  else if(format==LUMINANCE||format==6410)t.rgb=vec3(sf.r);
+  if(format==LUMINANCE||format==RGB)t.a=1.0;
+  vec3 e=vec3((color>>16)&255,(color>>8)&255,color&255)/255.0;
+  bool rgbOnly=format==LUMINANCE||format==RGB;
+  vec4 c=pf;
+  if(mode==REPLACE){c=vec4(format==ALPHA?pf.rgb:t.rgb,rgbOnly?pf.a:t.a);}
+  else if(mode==DECAL){if(format==RGB)c=vec4(t.rgb,pf.a);else if(format==6408)c=vec4(pf.rgb*(1.0-t.a)+t.rgb*t.a,pf.a);}
+  else if(mode==BLEND){c=vec4(format==ALPHA?pf.rgb:pf.rgb*(1.0-t.rgb)+e*t.rgb,rgbOnly?pf.a:pf.a*t.a);}
+  else if(mode==ADD){c=vec4(format==ALPHA?pf.rgb:pf.rgb+t.rgb,rgbOnly?pf.a:pf.a*t.a);}
+  else{if(format!=LUMINANCE&&format!=RGB)p.a=(p.a*s.a+127)/255;if(format!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;c=vec4(p)/255.0;}
+  return pack(c);
+}
 void main(){
   ivec4 p=clamp(ivec4(floor(vColor+0.5)),0,255);
-  if(textured!=0){
-    ivec4 s=sampleTexture(vUv);
-    if(envMode==MODULATE){
-      if(baseFormat!=LUMINANCE&&baseFormat!=RGB)p.a=(p.a*s.a+127)/255;
-      if(baseFormat!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;
-    }else{
-      vec4 pf=vec4(p)/255.0,sf=vec4(s)/255.0,t=sf;
-      if(baseFormat==ALPHA)t.rgb=vec3(0.0);
-      else if(baseFormat==LUMINANCE||baseFormat==6410)t.rgb=vec3(sf.r);
-      if(baseFormat==LUMINANCE||baseFormat==RGB)t.a=1.0;
-      vec3 e=vec3((envColor>>16)&255,(envColor>>8)&255,envColor&255)/255.0;
-      bool rgbOnly=baseFormat==LUMINANCE||baseFormat==RGB;
-      vec4 c=pf;
-      if(envMode==REPLACE){c=vec4(baseFormat==ALPHA?pf.rgb:t.rgb,rgbOnly?pf.a:t.a);}
-      else if(envMode==DECAL){if(baseFormat==RGB)c=vec4(t.rgb,pf.a);else if(baseFormat==6408)c=vec4(pf.rgb*(1.0-t.a)+t.rgb*t.a,pf.a);}
-      else if(envMode==BLEND){c=vec4(baseFormat==ALPHA?pf.rgb:pf.rgb*(1.0-t.rgb)+e*t.rgb,rgbOnly?pf.a:pf.a*t.a);}
-      else if(envMode==ADD){c=vec4(baseFormat==ALPHA?pf.rgb:pf.rgb+t.rgb,rgbOnly?pf.a:pf.a*t.a);}
-      else{if(baseFormat!=LUMINANCE&&baseFormat!=RGB)p.a=(p.a*s.a+127)/255;if(baseFormat!=ALPHA)p.rgb=(p.rgb*s.rgb+127)/255;c=vec4(p)/255.0;}
-      p=pack(c);
-    }
-  }
+  if(textured!=0)p=environment(p,sampleTexture(vUv),envMode,baseFormat,envColor);
+  if(reflecting!=0)p=environment(p,ivec4(floor(texture(cube,vReflection)*255.0+0.5)),cubeEnvMode,cubeFormat,cubeEnvColor);
   if(fogMode!=0){
     float d=1.0/gl_FragCoord.w,f;
     if(fogMode==9729)f=fogParams.z==fogParams.y?(d<=fogParams.y?1.0:0.0):(fogParams.z-d)/(fogParams.z-fogParams.y);
@@ -78,10 +87,10 @@ void main(){
 }`;
 
 export function createGl3d(documentRef=globalThis.document) {
-  let gl=null,tried=false,lost=false,program,vao,vertexBuffer,colorBuffer,scratch=new Uint8Array(0),uniforms,blank;
+  let gl=null,tried=false,lost=false,program,vao,vertexBuffer,colorBuffer,reflectionBuffer,scratch=new Uint8Array(0),uniforms,blank,blankCube;
   const targets=[],surfaces=[],textures=new Map();
   // Call counts, so tests can tell that frames really go through the GPU and how often data crosses over.
-  const stats={uploads:0,batches:0,draws:0,clears:0,readbacks:0,textures:0};
+  const stats={uploads:0,batches:0,draws:0,clears:0,readbacks:0,textures:0,cubeFaces:0};
   function context() {
     if(tried)return gl;
     tried=true;
@@ -103,10 +112,18 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,24,16);
     colorBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,4,gl.UNSIGNED_BYTE,true,4,0);
+    reflectionBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,reflectionBuffer);gl.vertexAttribPointer(3,3,gl.FLOAT,false,12,0);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);gl.pixelStorei(gl.PACK_ALIGNMENT,1);
-    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize','alphaTest','alphaBits','fogMode','fogParams','fogColor']
+    uniforms=Object.fromEntries(['tex','textured','texKey','texFlags','envMode','baseFormat','envColor','texSize','alphaTest','alphaBits','fogMode','fogParams','fogColor',
+      'cube','reflecting','cubeEnvMode','cubeFormat','cubeEnvColor']
       .map(name=>[name,gl.getUniformLocation(program,name==='alphaBits'?'alphaBits[0]':name)]));
-    gl.useProgram(program);gl.uniform1i(uniforms.tex,0);
+    gl.useProgram(program);gl.uniform1i(uniforms.tex,0);gl.uniform1i(uniforms.cube,1);
+    // Unit 1 always holds a complete cube map, so a draw without a reflection samples nothing missing.
+    blankCube=gl.createTexture();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_CUBE_MAP,blankCube);
+    gl.texStorage2D(gl.TEXTURE_CUBE_MAP,1,gl.RGBA8,1,1);
+    for(let face=0;face<6;face++)gl.texSubImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+face,0,0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.activeTexture(gl.TEXTURE0);
     // Unit 0 must never be left holding a picture texture: sampling the texture being drawn into is refused.
     blank=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,blank);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
@@ -145,6 +162,21 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.bindTexture(gl.TEXTURE_2D,t.texture);
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,width,height,gl.RGBA,gl.UNSIGNED_BYTE,scratch.subarray(0,n*4));
   }
+  // A cube face keeps GL's row order too; faces arrive one at a time in GL order (+X, -X, +Y, -Y, +Z, -Z).
+  function cube(key,face,argb,size) {
+    stats.cubeFaces++;
+    const n=size*size;if(scratch.length<n*4)scratch=new Uint8Array(n*4);
+    const rgba=new Uint32Array(scratch.buffer,0,n);
+    for(let i=0;i<n;i++){const p=argb[i];rgba[i]=(p&0xff00ff00)|((p>>>16)&0xff)|((p&0xff)<<16);}
+    let t=textures.get(key);
+    if(!t||!t.cube||t.width!==size){if(t)gl.deleteTexture(t.texture);
+      t={texture:gl.createTexture(),width:size,height:size,cube:true,linear:false};textures.set(key,t);
+      gl.bindTexture(gl.TEXTURE_CUBE_MAP,t.texture);gl.texStorage2D(gl.TEXTURE_CUBE_MAP,1,gl.RGBA8,size,size);
+      gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP,t.texture);
+    gl.texSubImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+face,0,0,0,size,size,gl.RGBA,gl.UNSIGNED_BYTE,scratch.subarray(0,n*4));
+  }
   function readback(surface,argb,width,height) {
     stats.readbacks++;
     const s=surfaces[surface];
@@ -153,7 +185,7 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.readPixels(0,0,width,height,gl.RGBA,gl.UNSIGNED_BYTE,scratch.subarray(0,n*4));
     swap(argb,width,height,false);
   }
-  function draw(surface,vertices,colors,vertexCount,commands,commandCount,floats) {
+  function draw(surface,vertices,colors,vertexCount,commands,commandCount,floats,reflections) {
     stats.batches++;
     const s=surfaces[surface];
     gl.bindFramebuffer(gl.FRAMEBUFFER,s.framebuffer);
@@ -161,6 +193,10 @@ export function createGl3d(documentRef=globalThis.document) {
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer);gl.bufferData(gl.ARRAY_BUFFER,vertices.subarray(0,vertexCount*6),gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(colors.buffer,colors.byteOffset,vertexCount*4),gl.STREAM_DRAW);
+    // Cube map coordinates cross over only for a batch that draws a reflection.
+    if(reflections){gl.bindBuffer(gl.ARRAY_BUFFER,reflectionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER,reflections.subarray(0,vertexCount*3),gl.STREAM_DRAW);gl.enableVertexAttribArray(3);}
+    else{gl.disableVertexAttribArray(3);gl.vertexAttrib3f(3,0,0,1);}
     gl.disable(gl.CULL_FACE);
     for(let c=0;c<commandCount;c++){
       const o=c*COMMAND;
@@ -181,6 +217,15 @@ export function createGl3d(documentRef=globalThis.document) {
           gl.uniform3f(uniforms.fogColor,floats[f+6],floats[f+7],floats[f+8]);}
         gl.uniform1i(uniforms.alphaTest,commands[o+26]);
         if(commands[o+26])gl.uniform1iv(uniforms.alphaBits,commands.subarray(o+28,o+36));
+        const reflecting=commands[o+37];
+        gl.uniform1i(uniforms.reflecting,reflecting);gl.activeTexture(gl.TEXTURE1);
+        if(reflecting){
+          const t=textures.get(commands[o+38]),linear=commands[o+39]===1;gl.bindTexture(gl.TEXTURE_CUBE_MAP,t.texture);
+          if(t.linear!==linear){const filter=linear?gl.LINEAR:gl.NEAREST;t.linear=linear;
+            gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MIN_FILTER,filter);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MAG_FILTER,filter);}
+          gl.uniform1i(uniforms.cubeEnvMode,commands[o+40]);gl.uniform1i(uniforms.cubeFormat,commands[o+41]);
+          gl.uniform1i(uniforms.cubeEnvColor,commands[o+42]);
+        }else gl.bindTexture(gl.TEXTURE_CUBE_MAP,blankCube);
         const textured=commands[o+18],key=commands[o+19];
         gl.uniform1i(uniforms.textured,textured);
         gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,textured&&key>=0?textures.get(key).texture:blank);
@@ -222,9 +267,10 @@ export function createGl3d(documentRef=globalThis.document) {
       Java_p905i_web_WebGl_upload(lib,target,argb,width,height){upload(target,argb,width,height);},
       Java_p905i_web_WebGl_readback(lib,surface,argb,width,height){readback(surface,argb,width,height);},
       Java_p905i_web_WebGl_texture(lib,key,argb,width,height){texture(key,argb,width,height);},
+      Java_p905i_web_WebGl_cube(lib,key,face,argb,size){cube(key,face,argb,size);},
       Java_p905i_web_WebGl_deleteTexture(lib,key){const t=textures.get(key);if(t){gl.deleteTexture(t.texture);textures.delete(key);}},
-      Java_p905i_web_WebGl_draw(lib,surface,vertices,colors,vertexCount,commands,commandCount,floats){
-        draw(surface,vertices,colors,vertexCount,commands,commandCount,floats);
+      Java_p905i_web_WebGl_draw(lib,surface,vertices,colors,vertexCount,commands,commandCount,floats,reflections){
+        draw(surface,vertices,colors,vertexCount,commands,commandCount,floats,reflections);
       },
     },
   };

@@ -16,9 +16,13 @@ public final class WebGl {
     public static native void readback(int surface, int[] argb, int width, int height);
     /** Stores texture contents (ARGB, rows as the texture's t coordinate grows) under a key. */
     public static native void texture(int key, int[] argb, int width, int height);
-    /** Frees the texture stored under a key. */
+    /** Stores one face of a cube map under a key (faces in GL order +X, -X, +Y, -Y, +Z, -Z; square, ARGB, rows as t grows). */
+    public static native void cube(int key, int face, int[] argb, int size);
+    /** Frees the texture or cube map stored under a key. */
     public static native void deleteTexture(int key);
     /** Draws a batch: six floats per vertex (clip x, y, z, w, u, v), one ARGB colour per vertex, and fixed-size
-     * command records with their float parameters, in order. */
-    public static native void draw(int surface, float[] vertices, int[] colors, int vertexCount, int[] commands, int commandCount, float[] floats);
+     * command records with their float parameters, in order. Reflections hold three cube map coordinates per vertex, or
+     * are null when no draw in the batch uses a cube map. */
+    public static native void draw(int surface, float[] vertices, int[] colors, int vertexCount, int[] commands, int commandCount, float[] floats,
+            float[] reflections);
 }

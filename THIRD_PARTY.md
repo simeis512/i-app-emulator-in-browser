@@ -65,7 +65,11 @@ the LGPL-2.0 filename records the earliest version, not an "only" restriction.
   projected triangles and their draw state instead of rasterising them, and keeps
   the CPU picture in step around each 3D section and wherever 2D drawing, pixel
   reads or image copies use a picture that GPU drawing has not reached yet;
-  deleting a texture also frees its GPU copy.
+  deleting a texture also frees its GPU copy. With it, texture unit 1 calls go to
+  `ReflectionUnit` instead of being dropped: a cube map whose coordinates are
+  generated per vertex (reflection or normal map) after lighting, carried with
+  each vertex through the vertex cache, clipping and projection, and combined
+  after unit 0 on the GPU. The software renderer still leaves unit 1 out.
 
 `UPSTREAM.json` lists every vendored input and its SHA-256, as well as original
 snapshot archive hashes. These archives themselves are not distributed here.

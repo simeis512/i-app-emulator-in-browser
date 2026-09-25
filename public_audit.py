@@ -46,6 +46,7 @@ src-ogl/p905i/web/FogState.java
 src-ogl/p905i/web/ExactMath.java
 src-ogl/p905i/web/WebGl.java
 src-ogl/opendoja/host/ogl/GpuBackend.java
+src-ogl/opendoja/host/ogl/ReflectionUnit.java
 tests/RuntimeChecks.java
 tests/AudioChecks.java
 tests/OglChecks.java
