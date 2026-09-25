@@ -413,7 +413,17 @@ async function main() {
       {key:'7',name:'textures and vertex arrays changed after use, a deleted texture and a viewport past the edges',
         points:[[36,192],[108,192],[180,192],[222,192],[66,48],[150,100]]},
     ];
-    const pictures={ogl:[],webgl:[]},logs={};
+    // Scene 8 puts a cube map on texture unit 1. Only WebGL2 draws it, so each point has a colour per renderer: the grey
+    // quad alone in software, and grey plus the cube face the generated coordinate meets on the GPU.
+    const grey=[64,64,64],reflections=[
+      {point:[40,40],webgl:[64,224,224],name:'upper half of +Z'},{point:[30,210],webgl:[224,64,224],name:'lower half of +Z'},
+      {point:[27,120],webgl:[224,64,64],name:'+X'},{point:[81,120],webgl:[64,224,64],name:'-X'},
+      {point:[159,120],webgl:[64,64,224],name:'+Y'},{point:[220,120],webgl:[224,224,64],name:'-Y on a clipped quad'},
+      {point:[90,210],webgl:[255,255,255],name:'-Z added past white'},{point:[150,210],webgl:[224,64,64],name:'+X from the normal'},
+      {point:[210,210],ogl:[32,64,16],webgl:[192,64,176],name:'unit 0 modulated, then unit 1 added'},
+      {point:[210,30],webgl:grey,name:'unit 1 off'},
+    ];
+    const pictures={ogl:[],webgl:[]},logs={},reflected={};
     for(const mode of ['ogl','webgl']) {
       const tab=await browser.newPage({viewport:{width:1200,height:1000}});const failures=[];
       tab.on('pageerror',error=>failures.push(String(error)));
@@ -442,11 +452,18 @@ async function main() {
           } else assert.ok(readbacks>=frames*3,`only ${readbacks} readbacks for ${frames} frames with CPU use inside sections`);
         }
       }
+      const before8=await tab.evaluate(()=>iapp.frames);
+      await tab.keyboard.press('8');
+      await tab.waitForFunction(count=>iapp.frames>=count+6,before8);
+      reflected[mode]=await tab.evaluate(points=>{const c=document.querySelector('#screen'),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+        return points.map(([x,y])=>Array.from(d.slice((y*c.width+x)*4,(y*c.width+x)*4+3)));},reflections.map(r=>r.point));
       const totals=mode==='webgl'?await tab.evaluate(()=>iapp.gl3dStats()):null;
+      // The cube is uploaded once; frames after that reuse the GPU copy.
+      if(totals)assert.equal(totals.cubeFaces,6,'the cube map crossed over once');
       if(totals)assert.ok(totals.textures>=5&&totals.draws>0,'textures reached the GPU');
-      // The log panel refreshes once a second.
+      // The log panel refreshes once a second; software reports the unit 1 it leaves out once scene 8 is drawn.
       await tab.waitForFunction(line=>document.querySelector('#log').textContent.includes(line),
-        mode==='webgl'?'experimental WebGL2 renderer':'Loading I-Appli');
+        mode==='webgl'?'experimental WebGL2 renderer':'cube reflection is not rendered');
       logs[mode]=await tab.locator('#log').textContent();
       assert.doesNotMatch(logs[mode],/Exception/,`${mode} log reports an exception`);
       if(mode==='ogl') {
@@ -459,6 +476,10 @@ async function main() {
       assert.deepEqual(failures,[]);await tab.close();
     }
     assert.match(logs.webgl,/experimental WebGL2 renderer/);
+    assert.match(logs.ogl,/cube reflection is not rendered/);assert.doesNotMatch(logs.webgl,/cube reflection is not rendered|3D WebGL2: (a second|cube map|texture generation|an incomplete)/);
+    reflections.forEach((r,i)=>{for(const mode of ['ogl','webgl']){const want=r[mode]||grey,got=reflected[mode][i];
+      assert.ok(want.every((v,c)=>Math.abs(v-got[c])<=1),`${mode} ${r.name} at ${r.point}: ${got} instead of ${want}`);}});
+    console.log('PASS WebGL2 adds a cube map reflection on texture unit 1; software leaves it out and says so');
     const at=(p,x,y)=>p.data.slice((y*p.width+x)*4,(y*p.width+x)*4+3);
     scenes.forEach((scene,i)=>{
       const soft=pictures.ogl[i],gpu=pictures.webgl[i];

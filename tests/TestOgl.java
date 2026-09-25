@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
-// Keys 1 to 7 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
+// Keys 1 to 8 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
 // 5 fog and colour masks; 6 2D, pixel reads, a second Graphics and an image copy inside 3D sections;
-// 7 textures and vertex arrays changed after use, a deleted texture and a viewport past the screen edges.
+// 7 textures and vertex arrays changed after use, a deleted texture and a viewport past the screen edges;
+// 8 a cube map reflection on texture unit 1, which only the WebGL2 renderer draws.
 // Key 9 fails on purpose, so the page log must show where an application stopped.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
+import com.nttdocomo.opt.ui.ogl.GraphicsOGL2;
 
 public class TestOgl extends IApplication {
     public void start() { Display.setCurrent(new Scene()); }
@@ -15,7 +17,7 @@ public class TestOgl extends IApplication {
         volatile int scene=1;
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
-            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_7)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_8)scene=key-Display.KEY_0;
             if(type==Display.KEY_PRESSED_EVENT && key==Display.KEY_9)fail(null);
         }
         void fail(int[] missing) { scene=missing.length; }
@@ -39,7 +41,7 @@ public class TestOgl extends IApplication {
             g.setColor(Graphics.getColorOfRGB(200,200,200));g.fillRect(0,h-40,w,40);
             gl.beginDrawing();
             setup(gl,w,h);
-            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else if(scene==6)sync(g,gl,w,h);else if(scene==7)changes(gl,w,h);else colours(gl,w,h);
+            if(scene==2)depth(gl,w,h);else if(scene==3)textures(gl,w,h);else if(scene==4)blending(gl,w,h);else if(scene==5)fog(gl,w,h);else if(scene==6)sync(g,gl,w,h);else if(scene==7)changes(gl,w,h);else if(scene==8)reflection(gl,w,h);else colours(gl,w,h);
             gl.glViewport(0,0,w,h);
             gl.endDrawing();
             // 2D over the 3D.
@@ -85,6 +87,68 @@ public class TestOgl extends IApplication {
             gl.glTexParameteri(GraphicsOGL.GL_TEXTURE_2D,GraphicsOGL.GL_TEXTURE_MIN_FILTER,GraphicsOGL.GL_NEAREST);
             gl.glTexParameteri(GraphicsOGL.GL_TEXTURE_2D,GraphicsOGL.GL_TEXTURE_MAG_FILTER,GraphicsOGL.GL_NEAREST);
         }
+        int cubeName, solidName;
+        /** An 8x8 paletted RGB cube face: rows 0 to 3 (the low t half) in the first colour, rows 4 to 7 in the second. */
+        byte[] face(int low,int high) {
+            byte[] data=new byte[48+32];
+            for(int c=0;c<3;c++){data[c]=(byte)(low>>(16-8*c));data[3+c]=(byte)(high>>(16-8*c));}
+            for(int i=16;i<32;i++)data[48+i]=0x11;
+            return data;
+        }
+        /** A grey quad three units away, facing the eye, with the normal that generates its unit 1 coordinates. */
+        void reflecting(GraphicsOGL gl,float x0,float y0,float x1,float y1,float nx,float ny,float nz) {
+            gl.glNormal3f(nx,ny,nz);quad(gl,x0,y0,x1,y1,-3,.25f,.25f,.25f);
+        }
+        void texGen(GraphicsOGL gl,int mode) {
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE1);
+            ((GraphicsOGL2)gl).glTexGeni(GraphicsOGL2.GL_STR,GraphicsOGL2.GL_TEXTURE_GEN_MODE,mode);
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE0);
+        }
+        void reflection(GraphicsOGL gl,int w,int h) {
+            gl.glMatrixMode(GraphicsOGL.GL_PROJECTION);gl.glLoadIdentity();gl.glOrthof(-1,1,-1,1,1,10);
+            gl.glMatrixMode(GraphicsOGL.GL_MODELVIEW);gl.glLoadIdentity();
+            if(solidName==0){int[] name=new int[2];gl.glGenTextures(2,name);solidName=name[0];cubeName=name[1];solid(gl,solidName,128,255,64);}
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE1);
+            gl.glBindTexture(GraphicsOGL2.GL_TEXTURE_CUBE_MAP,cubeName);
+            // +X red, -X green, +Y blue, -Y yellow, +Z cyan below magenta in t, -Z light grey. Uploaded once, as a game
+            // does; the GPU copy must then last across frames.
+            int[][] colours={{0xa00000,0xa00000},{0x00a000,0x00a000},{0x0000a0,0x0000a0},{0xa0a000,0xa0a000},{0x00a0a0,0xa000a0},{0xdcdcdc,0xdcdcdc}};
+            if(!cubeReady)for(int f=0;f<6;f++)gl.glCompressedTexImage2D(GraphicsOGL2.GL_TEXTURE_CUBE_MAP_POSITIVE_X+f,0,
+                GraphicsOGL.GL_PALETTE4_RGB8_OES,8,8,0,80,buffers.allocateByteBuffer(face(colours[f][0],colours[f][1])));
+            cubeReady=true;
+            gl.glTexParameteri(GraphicsOGL2.GL_TEXTURE_CUBE_MAP,GraphicsOGL.GL_TEXTURE_MIN_FILTER,GraphicsOGL.GL_LINEAR);
+            gl.glTexParameteri(GraphicsOGL2.GL_TEXTURE_CUBE_MAP,GraphicsOGL.GL_TEXTURE_MAG_FILTER,GraphicsOGL.GL_LINEAR);
+            gl.glTexEnvi(GraphicsOGL.GL_TEXTURE_ENV,GraphicsOGL.GL_TEXTURE_ENV_MODE,GraphicsOGL.GL_ADD);
+            gl.glEnable(GraphicsOGL2.GL_TEXTURE_CUBE_MAP);gl.glEnable(GraphicsOGL2.GL_TEXTURE_GEN_STR);
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE0);
+            texGen(gl,GraphicsOGL2.GL_REFLECTION_MAP);
+            // Facing the eye, the reflection meets +Z: its upper half above, its lower half below. Turned, it leaves by
+            // +X, -X, +Y and -Y (the last quad clipped at the right edge); sideways, it continues away to -Z, past white.
+            reflecting(gl,-.95f,.55f,-.55f,.95f,0,0,1);
+            reflecting(gl,-.95f,-.95f,-.55f,-.55f,0,0,1);
+            reflecting(gl,-.95f,-.2f,-.6f,.2f,.8f,0,.6f);
+            reflecting(gl,-.5f,-.2f,-.15f,.2f,-.8f,0,.6f);
+            reflecting(gl,.15f,-.2f,.5f,.2f,0,.8f,.6f);
+            reflecting(gl,.6f,-.2f,1.3f,.2f,0,-.8f,.6f);
+            reflecting(gl,-.45f,-.95f,-.05f,-.55f,1,0,0);
+            // Normal coordinates: the same sideways normal picks +X itself.
+            texGen(gl,GraphicsOGL2.GL_NORMAL_MAP);
+            reflecting(gl,.05f,-.95f,.45f,-.55f,1,0,0);
+            texGen(gl,GraphicsOGL2.GL_REFLECTION_MAP);
+            // Unit 0 modulates first, then unit 1 adds to its result.
+            gl.glBindTexture(GraphicsOGL.GL_TEXTURE_2D,solidName);
+            gl.glEnable(GraphicsOGL.GL_TEXTURE_2D);gl.glEnableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            gl.glTexEnvi(GraphicsOGL.GL_TEXTURE_ENV,GraphicsOGL.GL_TEXTURE_ENV_MODE,GraphicsOGL.GL_MODULATE);
+            gl.glTexCoordPointer(2,GraphicsOGL.GL_FLOAT,0,floats(0,0, 1,0, 0,1, 1,1));
+            reflecting(gl,.55f,-.95f,.95f,-.55f,0,0,1);
+            gl.glDisable(GraphicsOGL.GL_TEXTURE_2D);gl.glDisableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
+            // Unit 1 off again: nothing is added.
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE1);
+            gl.glDisable(GraphicsOGL2.GL_TEXTURE_CUBE_MAP);gl.glDisable(GraphicsOGL2.GL_TEXTURE_GEN_STR);
+            gl.glActiveTexture(GraphicsOGL.GL_TEXTURE0);
+            reflecting(gl,.55f,.55f,.95f,.95f,0,0,1);
+        }
+        boolean cubeReady;
         void changes(GraphicsOGL gl,int w,int h) {
             gl.glEnable(GraphicsOGL.GL_TEXTURE_2D);gl.glEnableClientState(GraphicsOGL.GL_TEXTURE_COORD_ARRAY);
             gl.glTexEnvi(GraphicsOGL.GL_TEXTURE_ENV,GraphicsOGL.GL_TEXTURE_ENV_MODE,GraphicsOGL.GL_REPLACE);
