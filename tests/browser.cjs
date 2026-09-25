@@ -449,6 +449,13 @@ async function main() {
         mode==='webgl'?'experimental WebGL2 renderer':'Loading I-Appli');
       logs[mode]=await tab.locator('#log').textContent();
       assert.doesNotMatch(logs[mode],/Exception/,`${mode} log reports an exception`);
+      if(mode==='ogl') {
+        // A report from a handset has only the page log, so a stopped application must say where it failed.
+        await tab.keyboard.press('9');
+        await tab.waitForFunction(()=>/FATAL: java\.lang\.NullPointerException\n(.*\n)*\tat TestOgl\$Scene\.(fail|processEvent)/
+          .test(document.querySelector('#log').textContent),null,{timeout:15000});
+        console.log('PASS a stopped application shows its stack trace in the page log');
+      }
       assert.deepEqual(failures,[]);await tab.close();
     }
     assert.match(logs.webgl,/experimental WebGL2 renderer/);

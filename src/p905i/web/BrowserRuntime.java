@@ -120,6 +120,14 @@ public final class BrowserRuntime {
                 || e instanceof ExceptionInInitializerError)) e = e.getCause();
         failure = e.toString();
         recordLog("FATAL: " + failure);
+        // The page shows recorded lines only, so a report from a handset carries where it failed.
+        int causes = 0;
+        for (Throwable t = e; t != null && causes < 4; t = t.getCause(), causes++) {
+            if (t != e) recordLog("Caused by: " + t);
+            StackTraceElement[] trace = t.getStackTrace();
+            for (int i = 0; i < trace.length && i < 24; i++) recordLog("\tat " + trace[i]);
+            if (trace.length > 24) recordLog("\t... " + (trace.length - 24) + " more");
+        }
         e.printStackTrace();
     }
     /** The handset showed the soft key labels outside the application area, so report them

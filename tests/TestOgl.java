@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Original 3D test fixture: every shape and colour is defined here; no recovered code, media or device assets.
 // The same frames are drawn by the software and WebGL2 renderers and compared in tests/browser.cjs.
-// Keys 1 to 5 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
+// Keys 1 to 7 choose the scene: 1 colours, shading, clipping and viewports; 2 depth; 3 textures; 4 alpha test and blending;
 // 5 fog and colour masks; 6 2D, pixel reads, a second Graphics and an image copy inside 3D sections;
 // 7 textures and vertex arrays changed after use, a deleted texture and a viewport past the screen edges.
+// Key 9 fails on purpose, so the page log must show where an application stopped.
 import com.nttdocomo.ui.*;
 import com.nttdocomo.ui.ogl.*;
 
@@ -15,7 +16,9 @@ public class TestOgl extends IApplication {
         Scene() { new Thread(this).start(); }
         public void processEvent(int type,int key) {
             if(type==Display.KEY_PRESSED_EVENT && key>=Display.KEY_1 && key<=Display.KEY_7)scene=key-Display.KEY_0;
+            if(type==Display.KEY_PRESSED_EVENT && key==Display.KEY_9)fail(null);
         }
+        void fail(int[] missing) { scene=missing.length; }
         FloatBuffer floats(float... values) { return buffers.allocateFloatBuffer(values); }
         void shape(GraphicsOGL gl,int mode,int shade,float[] vertices,float[] colors) {
             gl.glShadeModel(shade);
