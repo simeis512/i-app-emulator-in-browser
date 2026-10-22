@@ -38,6 +38,7 @@ tests/           自作データだけで動く検証
 | `loader.mjs` | JAR / JAM / SP の読み込みと判定 |
 | `audio.mjs` / `instruments.mjs` | Web Audio の簡易音源と PCM 再生 / 利用者が選んだ音色ファイルの読み込み |
 | `haptics.mjs` | 振動（端末とゲームパッド） |
+| `input.mjs` | キーボード・画面のキー・ゲームパッドからキーコードへの対応と、押されているキーの管理 |
 | `gl3d.mjs` | WebGL2 での 3D 描画（試験中） |
 | `index.html` / `style.css` / `_headers` | ページ、見た目、配信時のヘッダー |
 
@@ -107,7 +108,7 @@ DOM にも CheerpJ にも触らない処理が `app.js` に 10 行以上たま�
 | `runtime` | FreeJ2ME-Plus 側（`src/`、`build.py` のパッチ） |
 | `ogl` | 3D 描画（`src-ogl/`、`build_ogl*.py`、`web/gl3d.mjs`） |
 | `audio` | 音（`web/audio.mjs`、`web/instruments.mjs`、音声系 Java） |
-| `ui` | 画面・入力・保存・振動（`web/app.js`、`web/loader.mjs`、`web/haptics.mjs` など） |
+| `ui` | 画面・入力・保存・振動（`web/app.js`、`web/loader.mjs`、`web/input.mjs`、`web/haptics.mjs` など） |
 | `server` | ローカルサーバーと起動スクリプト（`serve.py`、`Start-Emulator.*`） |
 | `release` | 公開検査・ライセンス表示・配布（`public_audit.py`、`notices.py`、`package.py`、CI の公開） |
 | `deps` | 上流ソースや依存パッケージの更新 |

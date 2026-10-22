@@ -4,8 +4,11 @@ import { BrowserAudio } from './audio.mjs';
 import { readInstrumentFile } from './instruments.mjs';
 import { BrowserHaptics } from './haptics.mjs';
 import { createGl3d } from './gl3d.mjs';
-import { DIAL, PAD_AXES, PAD_DEFAULT, PAD_LEARN, keycode } from './input.mjs';
+import { DIAL, HeldKeys, PAD_DEFAULT, PAD_LEARN, dialCodes, keycode, numpadArea, padWanted, turnShift } from './input.mjs';
 const $ = id => document.getElementById(id);
+// Storage can be refused (private windows, blocked site data); settings then last for the page only.
+function stored(name){try{return localStorage.getItem(name);}catch{return null;}}
+function store(name,value){try{localStorage.setItem(name,value);}catch{}}
 const canvas = $('screen'), ctx = canvas.getContext('2d', { alpha:false });
 let files = {}, runtime, application, booted = false, preparing = false;
 let frames = 0, imageData, polling = false, fpsFrames = 0, fpsTime = performance.now();
@@ -69,19 +72,18 @@ function setPlaying(on) {
 }
 $('leave-play').onclick=()=>setPlaying(!document.body.classList.contains('playing'));
 // A keyboard or a gamepad makes the on-screen keys dead weight, so they can go.
-let keypadOff=false;
-try{keypadOff=localStorage.getItem('keypadOff')==='1';}catch{}
+let keypadOff=stored('keypadOff')==='1';
 function setKeypad(shown) {
   keypadOff=!shown;document.body.classList.toggle('no-keypad',keypadOff);
   $('show-keypad').textContent=keypadOff?'キー表示':'キー非表示';
-  try{localStorage.setItem('keypadOff',keypadOff?'1':'0');}catch{}
+  store('keypadOff',keypadOff?'1':'0');
 }
 $('show-keypad').onclick=()=>{release();setKeypad(keypadOff);fitKeypad();};
 // The screen and the keys split the height; the bar between them sets the share,
 // and each side scales to fill its own band without changing shape.
 const padArea=document.querySelector('.controls'),padKeys=document.querySelector('.keypad');
-let share=62;
-try{share=Math.min(90,Math.max(20,Number(localStorage.getItem('playShare'))||62));}catch{}
+const clampShare=value=>Math.min(90,Math.max(20,value));
+let share=clampShare(Number(stored('playShare'))||62);
 function fitKeypad() {
   if(!document.body.classList.contains('playing')) {
     padKeys.classList.remove('wide');delete padKeys.dataset.wide;
@@ -112,11 +114,11 @@ function applyShare() {
   document.body.style.setProperty('--keys',100-share);
   fitKeypad();
 }
-function saveShare(){try{localStorage.setItem('playShare',String(share));}catch{}}
+function saveShare(){store('playShare',String(share));}
 function moveSplit(clientY) {
   const box=document.querySelector('.workspace').getBoundingClientRect();
   if(!box.height)return;
-  share=Math.round(Math.min(90,Math.max(20,(clientY-box.top)/box.height*100)));
+  share=Math.round(clampShare((clientY-box.top)/box.height*100));
   applyShare();
 }
 $('split').onpointerdown=e=>{
@@ -127,7 +129,7 @@ $('split').onpointerup=$('split').onpointercancel=()=>{$('split').classList.remo
 $('split').onkeydown=e=>{
   const step=e.key==='ArrowUp'?-3:e.key==='ArrowDown'?3:0;
   if(!step)return;
-  e.preventDefault();share=Math.min(90,Math.max(20,share+step));applyShare();saveShare();
+  e.preventDefault();share=clampShare(share+step);applyShare();saveShare();
 };
 new ResizeObserver(fitKeypad).observe(padArea);
 setKeypad(!keypadOff);applyShare();
@@ -271,18 +273,13 @@ async function start() {
 }
 $('start').onclick=()=>booted?location.reload():start();
 
-// Track physical sources, not just numeric codes (Enter and Space share a code).
-const sources=new Map();
+const held=new HeldKeys(),sources=held.sources;
 function key(source,code,down) {
   if(!runtime)return;
   if(down) {
-    if(sources.has(source))return;
-    const held=[...sources.values()].includes(code);sources.set(source,code);if(held)return;
+    if(!held.press(source,code))return;
     haptics.pulse();
-  } else {
-    if(!sources.has(source))return;
-    code=sources.get(source);sources.delete(source);if([...sources.values()].includes(code))return;
-  }
+  } else if((code=held.release(source))===undefined)return;
   for(const button of document.querySelectorAll(`[data-key="${code}"]`))button.classList.toggle('pressed',down);
   javaCall(()=>runtime.key(code,down)).catch(error=>status(String(error),true));
 }
@@ -299,32 +296,25 @@ let keypadTurn=0;
 for(const button of document.querySelectorAll('.keypad button')) {
   const cap=document.createElement('span');cap.className='cap';cap.append(...button.childNodes);button.append(cap);
 }
-// Turning the handset moves every key with it, so the dial sends the rotated direction.
-const turnShift=()=>keypadTurn===0?0:keypadTurn<0?2:6;
 function applyTurn() {
   // The arrows stay printed outward; turning changes which key each position is.
   for(let index=0;index<4;index++)
-    dpad.querySelector('i.'+SPOT[index]).dataset.code=DIAL[(index*2+turnShift())%8][0];
+    dpad.querySelector('i.'+SPOT[index]).dataset.code=DIAL[(index*2+turnShift(keypadTurn))%8][0];
   for(const element of [document.querySelector('.keypad'),document.body]) {
     element.classList.toggle('turn-left',keypadTurn<0);element.classList.toggle('turn-right',keypadTurn>0);
   }
   const numpad=document.querySelector('.numpad');
-  [...numpad.children].forEach((button,index)=>{
-    const row=Math.floor(index/3)+1,column=index%3+1;
-    button.style.gridArea=keypadTurn===0?'':keypadTurn<0?`${4-column}/${row}`:`${column}/${5-row}`;
-  });
-  try{localStorage.setItem('keypadTurn',String(keypadTurn));}catch{}
+  [...numpad.children].forEach((button,index)=>{button.style.gridArea=numpadArea(index,keypadTurn);});
+  store('keypadTurn',String(keypadTurn));
   fitKeypad();
 }
-try{keypadTurn=Number(localStorage.getItem('keypadTurn'))||0;}catch{}
+keypadTurn=Number(stored('keypadTurn'))||0;
 $('keypad-turn').value=String(keypadTurn);
 $('keypad-turn').onchange=()=>{release();keypadTurn=Number($('keypad-turn').value);applyTurn();};
 applyTurn();
 function dpadAim(event) {
-  const box=dpad.getBoundingClientRect(),x=event.clientX-box.left-box.width/2,y=event.clientY-box.top-box.height/2;
-  if(Math.hypot(x,y)<box.width*.24)return [];
-  const index=((Math.round(Math.atan2(y,x)*4/Math.PI)%8)+8)%8;
-  return DIAL[(index+turnShift())%8];
+  const box=dpad.getBoundingClientRect();
+  return dialCodes(event.clientX-box.left-box.width/2,event.clientY-box.top-box.height/2,box.width,keypadTurn);
 }
 function dpadShow(codes) {
   for(const glyph of dpad.querySelectorAll('i'))glyph.classList.toggle('on',codes.includes(Number(glyph.dataset.code)));
@@ -359,8 +349,8 @@ document.addEventListener('visibilitychange',()=>{
 
 // Gamepads feed the same key() path as touch and keyboard, so a held key stays consistent.
 let padMap={...PAD_DEFAULT},padHeld=new Map(),padLearn=-1,padPrev=new Set();
-try{const saved=localStorage.getItem('padMap');if(saved)padMap={...PAD_DEFAULT,...JSON.parse(saved)};}catch{}
-function padSave(){try{localStorage.setItem('padMap',JSON.stringify(padMap));}catch{}}
+try{const saved=stored('padMap');if(saved)padMap={...PAD_DEFAULT,...JSON.parse(saved)};}catch{}
+function padSave(){store('padMap',JSON.stringify(padMap));}
 function pads(){return [...(navigator.getGamepads?.()||[])].filter(Boolean);}
 function padPressed(){const set=new Set();for(const pad of pads())pad.buttons.forEach((b,i)=>{if(b.pressed)set.add(i);});return set;}
 function padStatus() {
@@ -369,19 +359,6 @@ function padStatus() {
     list.map(pad=>pad.id+(pad.mapping==='standard'?'':'（標準配置ではありません）')).join(' / '):
     '接続されていません。ボタンを押すと認識します。';
   $('pad-remap').disabled=$('pad-reset').disabled=!list.length;
-}
-function padWanted() {
-  const wanted=new Map();
-  for(const pad of pads()) {
-    pad.buttons.forEach((button,index)=>{
-      if(button.pressed&&padMap[index]!==undefined)wanted.set(`pad${pad.index}:b${index}`,padMap[index]);
-    });
-    for(const [axis,[low,high]] of Object.entries(PAD_AXES)) {
-      const value=pad.axes[axis]??0,source=`pad${pad.index}:a${axis}`;
-      if(value<=-.5)wanted.set(source,low);else if(value>=.5)wanted.set(source,high);
-    }
-  }
-  return wanted;
 }
 function padAsk(){$('pad-remap-status').hidden=false;$('pad-remap-status').textContent=`「${PAD_LEARN[padLearn][1]}」に割り当てるボタンを押してください。`;}
 function padStopLearn(message) {
@@ -400,7 +377,7 @@ function padLearnStep() {
 function padPoll() {
   requestAnimationFrame(padPoll);
   if(padLearn>=0){padLearnStep();return;}
-  const wanted=padWanted();
+  const wanted=padWanted(pads(),padMap);
   for(const [source,code] of padHeld)if(wanted.get(source)!==code)key(source,code,false);
   for(const [source,code] of wanted)if(padHeld.get(source)!==code)key(source,code,true);
   padHeld=wanted;
