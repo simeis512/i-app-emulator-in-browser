@@ -20,6 +20,8 @@ NOTICE.txt
 UPSTREAM.json
 build.py
 build_ogl.py
+build_ogl_raster.py
+build_ogl_adapter.py
 build_support.py
 build_state.py
 check.py
@@ -60,6 +62,7 @@ tests/audio.cjs
 tests/loader.test.mjs
 tests/instruments.test.mjs
 tests/haptics.test.mjs
+tests/input.test.mjs
 tests/instrument-fixture.mjs
 tests/test_server.py
 tests/test_build.py
@@ -70,6 +73,7 @@ web/loader.mjs
 web/audio.mjs
 web/instruments.mjs
 web/haptics.mjs
+web/input.mjs
 web/gl3d.mjs
 web/style.css
 '''.split()
