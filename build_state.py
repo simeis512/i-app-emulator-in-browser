@@ -12,7 +12,7 @@ def fingerprint(root,component):
            'UPSTREAM.json','LICENSE','THIRD_PARTY.md','NOTICE.txt']
     names.extend(p.relative_to(root).as_posix() for p in (root/'src').rglob('*.java'))
     if component=='ogl':
-        names.append('build_ogl.py')
+        names.extend(['build_ogl.py','build_ogl_raster.py','build_ogl_adapter.py'])
         names.extend(p.relative_to(root).as_posix() for p in (root/'src-ogl').rglob('*.java'))
     for p in (root/'licenses').glob('*.txt'):names.append(p.relative_to(root).as_posix())
     # Read the explicit upstream manifest, not arbitrary files in the workspace.

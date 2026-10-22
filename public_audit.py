@@ -20,6 +20,8 @@ NOTICE.txt
 UPSTREAM.json
 build.py
 build_ogl.py
+build_ogl_raster.py
+build_ogl_adapter.py
 build_support.py
 build_state.py
 check.py
