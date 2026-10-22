@@ -9,9 +9,11 @@ OWN_FILES='''
 .gitattributes
 .gitignore
 .github/workflows/check.yml
+.github/pull_request_template.md
 README.md
 AGENTS.md
 CLAUDE.md
+CONTRIBUTING.md
 LICENSE
 THIRD_PARTY.md
 NOTICE.txt
