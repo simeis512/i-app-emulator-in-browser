@@ -72,6 +72,7 @@ web/loader.mjs
 web/audio.mjs
 web/instruments.mjs
 web/haptics.mjs
+web/input.mjs
 web/gl3d.mjs
 web/style.css
 '''.split()
