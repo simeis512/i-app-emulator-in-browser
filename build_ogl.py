@@ -4,20 +4,18 @@ Native JOGL is deliberately excluded: the selected renderer draws into the same
 BufferedImage as FreeJ2ME's 2D graphics. Original upstream sources stay intact.
 """
 from pathlib import Path
-import hashlib, re, subprocess, zipfile
+import hashlib, re, zipfile
 from dependencies import verify
-from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, MODIFIED
+from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, write_modified, compile_java
 from build_state import RECORD, record, status
 from build_ogl_raster import RASTER_LOOP
-from build_ogl_adapter import CPU_SYNC
+from build_ogl_adapter import adapter_source
 ROOT=Path(__file__).resolve().parent
 UP=ROOT/'vendor/openDoJa-master/src/main/java'
 OUT=ROOT/'build/ogl-src'
 CLASSES=ROOT/'build/ogl-classes'
 
-def write(rel,text):
-    dst=OUT/rel;dst.parent.mkdir(parents=True,exist_ok=True)
-    dst.write_text(MODIFIED+text,encoding='utf-8');return dst
+def write(rel,text):return write_modified(OUT/rel,text)
 
 def build():
     compiler=find_javac()
@@ -178,89 +176,11 @@ def build():
     text=text.replace('public DesktopSurface(int width, int height) {',
                       'public DesktopSurface(BufferedImage image) { this.image = image; }\n    public DesktopSurface(int width, int height) {')
     sources.append(write(rel,text))
-    methods=re.findall(r'public (?:final )?(\w+(?:\[\])?) ((?:gl\w+|beginDrawing|endDrawing))\(([^)]*)\)\s*\{',renderer)
-    adapter='''package com.nttdocomo.ui;
-import com.nttdocomo.ui.ogl.*;
-import com.nttdocomo.opt.ui.ogl.GraphicsOGL2;
-import org.recompile.mobile.*;
-import opendoja.host.DesktopSurface;
-import opendoja.host.ogl.*;
-/** Browser software OpenGL bridge. GPL-3.0-or-later. */
-public class Graphics extends PlatformGraphics implements GraphicsOGL2 {
-    private final OglRenderer ogl;
-    private int activeTexture = GL_TEXTURE0, clientTexture = GL_TEXTURE0;
-    private boolean warnedReflection;
-    private int writeMask = -1;
-    private final java.awt.image.BufferedImage picture;
-    private final opendoja.host.ogl.ReflectionUnit unit1;
-    public void glColorMask(boolean red, boolean green, boolean blue, boolean alpha) {
-        writeMask=(red?0x00ff0000:0)|(green?0x0000ff00:0)|(blue?0x000000ff:0)|(alpha?0xff000000:0);
-        ogl.gpuColorMask(red,green,blue,alpha);
-    }
-    // The GPU renderer masks its own draws; a colour clear is still filled on the CPU, once the GPU picture is back.
-    private int[] beforeMaskedDraw(boolean clear) {
-        if(writeMask == -1) return null;
-        if(ogl.gpuActive()) { if(!clear) return null; ogl.gpuFlush(); }
-        return canvasData.clone();
-    }
-    private void afterMaskedDraw(int[] before) {
-        if(before!=null) for(int i=0;i<canvasData.length;i++) canvasData[i]=(canvasData[i]&writeMask)|(before[i]&~writeMask);
-    }
-    private void reflectionNotice() {
-        if(!warnedReflection) { warnedReflection=true; p905i.web.BrowserRuntime.recordLog("3D limitation: secondary texture/cube reflection is not rendered."); }
-    }
-    public void glActiveTexture(int texture) {
-        if(texture != GL_TEXTURE0 && texture != GL_TEXTURE0+1) throw new IllegalArgumentException("texture unit");
-        activeTexture=texture;
-    }
-    public void glTexEnvf(int target, int pname, float param) {
-        if(activeTexture!=GL_TEXTURE0) { if(unit1!=null) unit1.glTexEnvf(target,pname,param); else reflectionNotice(); return; }
-        ogl.glTexEnvi(target,pname,Math.round(param));
-    }
-    public Graphics(final PlatformImage image) {
-        super(image);
-        picture = image.getCanvas();
-        final DesktopSurface surface = new DesktopSurface(image.getCanvas());
-        ogl = new AcrodeaOglRenderer(new OglRenderer.Host() {
-            public DesktopSurface surface() { return surface; }
-            public java.awt.Graphics2D delegate() { return gc; }
-            public void markOpenGlesActivity() { surface.markOpenGlesActivity(); }
-            // DoJa presents the completed canvas at Graphics.unlock(). A clear
-            // must not expose an intermediate frame or bypass glColorMask.
-            public void flushSurfacePresentation() { }
-            public void onSoftwareSurfaceMutation() { }
-        });
-        unit1 = ogl.gpuReflectionUnit();
-    }
-'''
-    adapter=adapter.replace('    private void reflectionNotice() {',CPU_SYNC+'    private void reflectionNotice() {')
-    for result,name,params in methods:
-        args=', '.join(p.strip().split()[-1] for p in params.split(',') if p.strip())
-        guard=''
-        if name=='glClientActiveTexture': guard='clientTexture=texture; '
-        if name in ['glEnable','glDisable']: guard=f'if(activeTexture!=GL_TEXTURE0 && (cap==GL_TEXTURE_2D || cap==GL_TEXTURE_CUBE_MAP || cap==GL_TEXTURE_GEN_STR)) {{ if(unit1!=null) unit1.{name}(cap); else reflectionNotice(); return; }} '
-        if name in ['glEnableClientState','glDisableClientState']:guard='if(clientTexture!=GL_TEXTURE0 && array==GL_TEXTURE_COORD_ARRAY) return; '
-        if name=='glTexCoordPointer':guard='if(clientTexture!=GL_TEXTURE0) return; '
-        if name in ['glBindTexture','glCompressedTexImage2D','glTexImage2D','glTexParameterf','glTexParameteri','glTexEnvf','glTexEnvi','glTexEnvfv']:
-            guard=f'if(activeTexture!=GL_TEXTURE0) {{ if(unit1!=null) unit1.{name}({args}); else reflectionNotice(); return; }} '
-        call=('return ' if result!='void' else '')+f'ogl.{name}({args});'
-        if name=='glDeleteTextures': call+=' if(unit1!=null) unit1.deleteTextures('+('n' if 'int n' in params else 'textures.length')+', textures);'
-        if name in ['glClear','glDrawArrays','glDrawElements']:
-            call=f'int[] before=beforeMaskedDraw({str(name=="glClear").lower()}); try {{ '+call+' } finally { afterMaskedDraw(before); }'
-        adapter+=f'    public {result} {name}({params}) {{ '+guard+call+' }\n'
     interface2=(UP/'com/nttdocomo/opt/ui/ogl/GraphicsOGL2.java').read_text(encoding='utf-8')
-    for result,name,params in re.findall(r'\b(void) (gl\w+)\(([^)]*)\);',interface2):
-        args=', '.join(p.strip().split()[-1] for p in params.split(',') if p.strip())
-        adapter+=(f'    public {result} {name}({params}) {{ if(activeTexture!=GL_TEXTURE0) {{ if(unit1!=null) {{ unit1.{name}({args}); return; }} '
-                  f'reflectionNotice(); return; }} throw new UnsupportedOperationException("OpenGL ES extension: {name}"); }}\n')
-    adapter+='}\n'
-    sources.append(write('com/nttdocomo/ui/Graphics.java',adapter))
+    sources.append(write('com/nttdocomo/ui/Graphics.java',adapter_source(renderer,interface2)))
     sources+=list((ROOT/'src-ogl').rglob('*.java'))
-    sources.sort(key=lambda p:p.as_posix())
     clean_classes(CLASSES)
-    argfile=ROOT/'build/ogl-sources.txt'
-    argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources),encoding='utf-8')
-    subprocess.run([compiler,'-J-Duser.language=en','--release','17','-encoding','UTF-8','-cp',str(ROOT/'web/p905i-runtime.jar'),'-d',str(CLASSES),'@'+str(argfile)],check=True)
+    compile_java(compiler,17,sources,CLASSES,ROOT/'build/ogl-sources.txt',ROOT/'web/p905i-runtime.jar')
     jar=ROOT/'web/p905i-ogl.jar'
     with zipfile.ZipFile(jar,'w',zipfile.ZIP_DEFLATED) as z:
         for p in sorted(CLASSES.rglob('*.class'),key=lambda p:p.as_posix()):add_file(z,p,p.relative_to(CLASSES).as_posix())

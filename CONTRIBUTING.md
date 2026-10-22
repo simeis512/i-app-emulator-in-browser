@@ -17,6 +17,7 @@ src-ogl/         openDoJa の 3D 描画への追加クラス（Java 17、CheerpJ
 web/             ブラウザ側の画面・入力・音・WebGL2
 build.py         FreeJ2ME-Plus のビルドと文字列置換パッチ
 build_ogl.py     openDoJa（3D）のビルドと文字列置換パッチ
+build_ogl_*.py   build_ogl.py が差し込む画素ループ（raster）と Graphics アダプター（adapter）の生成
 vendor/          固定した上流ソース（編集しない。ハッシュは UPSTREAM.json）
 tests/           自作データだけで動く検証
 ```
@@ -104,7 +105,7 @@ DOM にも CheerpJ にも触らない処理が `app.js` に 10 行以上たま�
 | scope | 対象 |
 | --- | --- |
 | `runtime` | FreeJ2ME-Plus 側（`src/`、`build.py` のパッチ） |
-| `ogl` | 3D 描画（`src-ogl/`、`build_ogl.py`、`web/gl3d.mjs`） |
+| `ogl` | 3D 描画（`src-ogl/`、`build_ogl*.py`、`web/gl3d.mjs`） |
 | `audio` | 音（`web/audio.mjs`、`web/instruments.mjs`、音声系 Java） |
 | `ui` | 画面・入力・保存・振動（`web/app.js`、`web/loader.mjs`、`web/haptics.mjs` など） |
 | `server` | ローカルサーバーと起動スクリプト（`serve.py`、`Start-Emulator.*`） |

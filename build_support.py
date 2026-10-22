@@ -26,6 +26,17 @@ def find_javac():
     print('Compiler:',compiler,'('+version+')')
     return compiler
 
+def write_modified(path,text):
+    """A patched upstream source, marked as modified."""
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(MODIFIED+text,encoding='utf-8');return path
+
+def compile_java(compiler,release,sources,classes,argfile,classpath=None):
+    sources=sorted(sources,key=lambda p:p.as_posix())
+    argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources),encoding='utf-8')
+    subprocess.run([compiler,'-J-Duser.language=en','--release',str(release),'-encoding','UTF-8',
+                    *(['-cp',str(classpath)] if classpath else []),'-d',str(classes),'@'+str(argfile)],check=True)
+
 def clean_classes(path):
     """Only remove one of our two dedicated class-output directories."""
     resolved=path.resolve()

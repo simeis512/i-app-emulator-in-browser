@@ -1,8 +1,8 @@
 """Local Java 8 build from pinned sources; no game binary modifications."""
 from pathlib import Path
-import subprocess, zipfile
+import zipfile
 from dependencies import verify
-from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, MODIFIED
+from build_support import clean_classes, add_file, add_bytes, add_notices, find_javac, write_modified, compile_java
 from build_state import RECORD, record
 
 ROOT = Path(__file__).resolve().parent
@@ -22,10 +22,7 @@ def patched_sources():
             int spDataStart = prevSizes + headerSize;'''
     assert text.count(old) == 1
     text = text.replace(old, new).replace('scratchPadData.length-pos-1', 'scratchPadData.length-pos')
-    dst = BUILD / 'patched' / rel
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_text(MODIFIED+text, encoding='utf-8')
-    patches = {rel: dst}
+    patches = {rel: write_modified(BUILD / 'patched' / rel, text)}
     for rel, replacements in {
         'com/nttdocomo/ui/Canvas.java': [
             # The page draws the soft key labels below the screen, as the handset did, so the
@@ -138,8 +135,7 @@ def patched_sources():
             expected = 2 if old=='((PlatformPlayer)mediaSound.getPlayer()).setDoJaListener(listener, this);' else 1
             assert text.count(old)==expected, (rel,old)
             text=text.replace(old,new)
-        dst=BUILD/'patched'/rel;dst.parent.mkdir(parents=True,exist_ok=True)
-        dst.write_text(MODIFIED+text,encoding='utf-8');patches[rel]=dst
+        patches[rel]=write_modified(BUILD/'patched'/rel,text)
     return patches
 
 def build():
@@ -154,10 +150,7 @@ def build():
                if not {'libretro','win32pad'}.intersection(p.parts) and p.name != 'package-info.java']
     sources += list((ROOT/'src').rglob('*.java'))
     sources.append(ROOT/'vendor/openDoJa-master/src/main/java/opendoja/audio/mld/MLDNativeADPCMDecoder.java')
-    sources.sort(key=lambda p:p.as_posix())
-    argfile = BUILD/'sources.txt'
-    argfile.write_text('\n'.join('"'+p.as_posix()+'"' for p in sources), encoding='utf-8')
-    subprocess.run([compiler,'-J-Duser.language=en','--release','8','-encoding','UTF-8','-d',str(classes),'@'+str(argfile)],check=True)
+    compile_java(compiler,8,sources,classes,BUILD/'sources.txt')
     jar = WEB/'p905i-runtime.jar'
     with zipfile.ZipFile(jar, 'w', zipfile.ZIP_DEFLATED) as z:
         for base in [classes, VENDOR/'resources']:
