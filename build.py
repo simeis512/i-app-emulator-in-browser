@@ -86,8 +86,19 @@ def patched_sources():
              'if(livePlayer()) { ((PlatformPlayer.tempoControl)mediaSound.getPlayer()'),
             ('if(mediaSound != null) { ((PlatformPlayer.volumeControl)mediaSound.getPlayer()',
              'if(livePlayer()) { ((PlatformPlayer.volumeControl)mediaSound.getPlayer()'),
+            # Log why play/restart is refused before upstream throws; applications swallow the exception (#22).
+            ('public void play(int time)\n\t{\n', 'public void play(int time)\n\t{\n\t\tp905i.web.PlaybackLog.presenter("play", this, mediaSound, mediaData);\n'),
+            ('public void restart()\n\t{\n', 'public void restart()\n\t{\n\t\tp905i.web.PlaybackLog.presenter("restart", this, mediaSound, mediaData);\n'),
             ('public void setMediaListener(MediaListener listener)',
              'private boolean livePlayer() { return mediaSound != null && mediaSound.getPlayer() != null && mediaSound.getPlayer().getState() != Player.CLOSED; }\n\n\tpublic void setMediaListener(MediaListener listener)'),
+        ],
+        'com/nttdocomo/ui/impls/MediaSoundImpl.java': [
+            # The locator names the sound in refusal logs (#22).
+            ('private boolean isSingleUse = false, disposed = false, isRedistributable = false;',
+             'private boolean isSingleUse = false, disposed = false, isRedistributable = false;\n\tpublic String source = "";'),
+            ('if(s.contains("scratchpad:"))', 'source = s;\n\t\t\tif(s.contains("scratchpad:"))'),
+            ('if(overwritten == this) { throw new IllegalArgumentException("Cannot overwrite object area of this same object");}',
+             'p905i.web.PlaybackLog.use(this, disposed || isSingleUse);\n\t\tif(overwritten == this) { throw new IllegalArgumentException("Cannot overwrite object area of this same object");}'),
         ],
         'org/recompile/mobile/MIDletEnhancements.java': [
             # Thread.yield only hands the CPU over. DoJa frames are already limited after each flush, so limiting

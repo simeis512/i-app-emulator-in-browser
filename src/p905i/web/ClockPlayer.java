@@ -24,6 +24,7 @@ public final class ClockPlayer extends BasicPlayer {
     private int loops=1,volume=100;
     private long position,epoch,duration=Player.TIME_UNKNOWN;
     private double rate=1;
+    private String format="unreadable";private int size=-1;
     private volatile MediaListener listener;
     private volatile AudioPresenter presenter;
     private volatile int syncChannel=-1,syncKey=-1;
@@ -42,7 +43,7 @@ public final class ClockPlayer extends BasicPlayer {
     public ClockPlayer(InputStream stream){
         List<byte[]> samples=new ArrayList<byte[]>();
         try{
-            byte[] data=read(stream);
+            byte[] data=read(stream);size=data.length;format=formatOf(data);
             if(data.length>=4&&data[0]=='m'&&data[1]=='e'&&data[2]=='l'&&data[3]=='o'){
                 synchronized(MLDDecoder.class){
                     MLDDecoder.decodeMLD(data);
@@ -58,9 +59,19 @@ public final class ClockPlayer extends BasicPlayer {
             if(duration==0&&!samples.isEmpty())for(byte[] sample:samples)if(sample!=null)duration=Math.max(duration,waveDuration(sample));
             BrowserAudio.load(audioId,audioEvents,duration);
             for(int i=0;i<samples.size();i++)if(samples.get(i)!=null)BrowserAudio.sample(audioId,i,samples.get(i));
-            if(duration==Player.TIME_UNKNOWN)BrowserRuntime.recordLog("Media clock: unsupported audio format");
-        }catch(Exception e){BrowserRuntime.recordLog("Media clock: audio could not be decoded: "+e);}
+            if(duration==Player.TIME_UNKNOWN)BrowserRuntime.recordLog("Media clock: unsupported audio format ("+describe()+")");
+        }catch(Exception e){BrowserRuntime.recordLog("Media clock: audio could not be decoded: "+e+" ("+describe()+")");}
     }
+    private static String formatOf(byte[] data){
+        if(data.length<4)return "empty";
+        String magic=new String(data,0,4,java.nio.charset.StandardCharsets.ISO_8859_1);
+        if(magic.equals("melo"))return "MLD";if(magic.equals("MThd"))return "SMF";if(magic.equals("RIFF"))return "WAVE";
+        StringBuilder hex=new StringBuilder("unknown");for(int i=0;i<4;i++)hex.append(String.format(" %02x",data[i]&255));
+        return hex.toString();
+    }
+    private String describe(){return format+", "+size+" bytes"+(duration==Player.TIME_UNKNOWN?", unsupported":", "+duration/1000+" ms");}
+    /** Format, size and length of the media behind a player, for logs. */
+    public static String describe(Player p){ClockPlayer c=players.get(p);return c==null?"no media clock":c.describe();}
     private static long uint32(byte[] data,int offset){
         return (data[offset]&255L)|((data[offset+1]&255L)<<8)|((data[offset+2]&255L)<<16)|((data[offset+3]&255L)<<24);
     }

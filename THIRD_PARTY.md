@@ -21,7 +21,8 @@ retains its original terms and copyright notices. The root LICENSE contains GPL 
   sizes honoured, DoJa text drawn without antialiasing, `Thread.yield` in
   DoJa applications handing over the CPU without an extra frame-limit wait, and
   AudioPresenter tempo and volume kept for the next play when the presenter's
-  sound has been disposed.
+  sound has been disposed, and refused AudioPresenter play/restart and
+  MediaSound use calls logged with the sound's locator, format and size.
 
 Separately licensed components retained from that snapshot:
 
