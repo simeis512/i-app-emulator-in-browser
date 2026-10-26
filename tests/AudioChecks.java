@@ -11,6 +11,8 @@ import p905i.web.ClockPlayer;
 import p905i.web.MldPcm;
 import p905i.web.MldSharp;
 import p905i.web.MldNec;
+import p905i.web.BrowserRuntime;
+import p905i.web.PlaybackLog;
 import com.nttdocomo.ui.*;
 
 public class AudioChecks {
@@ -155,6 +157,26 @@ public class AudioChecks {
         ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(sharpMld(packet,on)));
         require(Math.abs(timeOf(clock.getAudioEvents(),256,0)-.25)<1e-6,"NEC StreamOn survives MLD conversion and follows the tempo map");
     }
+    static int count(String text,String part){int n=0;for(int i=text.indexOf(part);i>=0;i=text.indexOf(part,i+1))n++;return n;}
+    interface Call{void run()throws Exception;}
+    static boolean refused(Call call)throws Exception{try{call.run();return false;}catch(UIException|NullPointerException expected){return true;}}
+    static void refusalChecks(byte[] midi)throws Exception{
+        AudioPresenter presenter=AudioPresenter.getAudioPresenter(0);
+        require(refused(presenter::play)&&refused(presenter::play),"presenter without a sound refuses to play");
+        require(count(BrowserRuntime.getLog(),"AudioPresenter.play refused: no sound set (no sound)")==1,"refusal logged once, not on every retry");
+        MediaSound sound=MediaManager.getSound(midi);presenter.setSound(sound);
+        require(refused(presenter::play)&&BrowserRuntime.getLog().contains("AudioPresenter.play refused: use() has not been called (data, SMF, "+midi.length+" bytes, 1000 ms, state 100)"),
+            "sound that was never used is refused with its format and size");
+        sound.use();presenter.play();presenter.stop();
+        require(refused(presenter::play)==false,"used sound plays");
+        MediaSound unknown=MediaManager.getSound(new byte[]{'a','b','c','d',0});unknown.use();
+        require(BrowserRuntime.getLog().contains("Media clock: unsupported audio format (unknown 61 62 63 64, 5 bytes, unsupported)"),"unsupported data logged with its leading bytes");
+        presenter.stop();sound.dispose();
+        require(refused(sound::use)&&BrowserRuntime.getLog().contains("MediaSound.use refused: sound was disposed or already used once (data)"),"disposed sound refuses use");
+        require(refused(presenter::restart)&&BrowserRuntime.getLog().contains("AudioPresenter.restart refused: sound was disposed or could not be loaded (data)"),
+            "presenter whose sound was disposed reports it instead of a bare NullPointerException");
+        require(PlaybackLog.refusal(null,null)!=null&&PlaybackLog.refusal(sound,null)!=null,"refusal mirrors upstream checks");
+    }
     static byte[] bytes(Sequence sequence)throws Exception{
         ByteArrayOutputStream out=new ByteArrayOutputStream();MidiSystem.write(sequence,1,out);return out.toByteArray();
     }
@@ -186,6 +208,7 @@ public class AudioChecks {
             track.add(new MidiEvent(tempo,480));midi(track,960,ShortMessage.NOTE_ON,72,100);end(track,1440);
             ClockPlayer clock=new ClockPlayer(new ByteArrayInputStream(bytes(sequence)));
             double[] events=clock.getAudioEvents();
+            refusalChecks(bytes(sequence));
             require(Math.abs(timeOf(events,0x80,69)-.5)<1e-8&&Math.abs(timeOf(events,0x90,72)-.75)<1e-8&&clock.getDuration()==1000000,
                 "tempo changes preserve note-on/off timing and duration");
             Sequence smpte=new Sequence(Sequence.SMPTE_25,40);Track smpteTrack=smpte.createTrack();

@@ -45,6 +45,7 @@ src/p905i/web/BrowserAudio.java
 src/p905i/web/ClockPlayer.java
 src/p905i/web/MldPcm.java
 src/p905i/web/MldSharp.java
+src/p905i/web/PlaybackLog.java
 src/p905i/web/MldNec.java
 src-ogl/p905i/web/FogState.java
 src-ogl/p905i/web/ExactMath.java
